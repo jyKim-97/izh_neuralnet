@@ -5,11 +5,11 @@
 #include <math.h>
 #include <sys/time.h>
 
-#include "lib/parson.h"
-#include "lib/Izh.h"
-#include "lib/ntk.h"
-#include "lib/mt64.h"
-#include "lib/utils.h"
+#include "parson.h"
+#include "Izh.h"
+#include "ntk.h"
+#include "mt64.h"
+#include "utils.h"
 
 extern double gRatio; // from Izh.c
 extern double CELL_TAU[_n_types];
