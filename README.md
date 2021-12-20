@@ -2,7 +2,7 @@
 Simulation codes for Izhikevich neural network 
 
 # Prerequisites
-* gcc 5.4.0  
+* gcc 5.4.0 (gnu 11)
 * Intel Math Kernel Library 2018 version
 * Python 3
 * numpy, matplotlib library

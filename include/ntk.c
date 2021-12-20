@@ -23,7 +23,8 @@ void init_bi_ntk(int num_pre, int num_post, ntk_t *ntk)
 }
 
 
-void gen_bi_random_ntk_with_type(int *node_types, double p_cnt_type[_n_types][_n_types],
+void gen_bi_random_ntk_with_type(int *pre_node_types, int *post_node_types,
+                            double p_cnt_type[_n_types][_n_types],
                             double str_cnt_type[_n_types][_n_types], ntk_t *ntk)
 {
     // node_type, 1 ~ ntype
@@ -31,12 +32,14 @@ void gen_bi_random_ntk_with_type(int *node_types, double p_cnt_type[_n_types][_n
     int i, j, pre_tp, post_tp; // i: pre id; j: post id
     double p, strength;
 
-    memcpy(ntk->node_types, node_types, ntk->num_pre * sizeof(int));
+    memcpy(ntk->node_types, pre_node_types, ntk->num_pre * sizeof(int));
 
     for (i=0; i<ntk->num_pre; i++){
-        pre_tp = node_types[i];
+        pre_tp = pre_node_types[i];
         for (j=0; j<ntk->num_post; j++){
-            post_tp = node_types[j];
+            post_tp = post_node_types[j];
+
+            // printf("%d:%d - %d:%d\n", ntk->num_pre, pre_tp, ntk->num_post, post_tp);
 
             if ((ntk->num_pre == ntk->num_post) && (i == j)){
                 continue;

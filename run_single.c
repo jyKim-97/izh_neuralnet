@@ -47,30 +47,32 @@ void open_file_with_tag(FILE **fid, char tag[], char typename[]);
 void square_current(int n, double *ic, int num_cells, int n0, int n1, double amp);
 
 
+int target_id = 5;
+
+
 int main(int argc, char **argv)
 {
     double amp = 5;
 
-    if (argc == 1){
-        fprintf(stderr, "type the json file path\n");
-        return 1;
-    } else if (argc == 3){
-        amp = atof(argv[2]);
-    }
+    init_genrand64(101);
 
+    char fname[100] = "./simul_infos/single_ntk.json";
+    if (argc == 2){
+        strcpy(fname, argv[1]);
+    }
 
     // read argument
     simulinfo_t info;
     // read simulinfo params
-    read_single_info(argv[1], &info);
+    read_single_info(fname, &info);
 
     // open file writer
     neuron_t cells;
     syn_t syns;
     bcksyn_t bck_syns;
 
-    gRatio = 0.05;
-    init_simulation(&info, &cells, &syns, &bck_syns);
+    gRatio = 1;
+    init_simulation(&info, &cells, &syns, &bck_syns);    
     
     // open writer
     FILE *fv, *fu, *fi, *fr, *ft; // ft is the spike times
@@ -90,8 +92,8 @@ int main(int argc, char **argv)
     // run simulation
     progbar_t bar;
     int max_step = info.tmax / _dt;
-    square_current(-1, NULL, cells.num_cells, 100/_dt, 300/_dt, amp);
-    printf("Start single network simulation, Network Size = %d, tmax = %.1f ms, dt = %.2f ms, %d itr\n",
+    square_current(-1, NULL, cells.num_cells, 2000/_dt, 2500/_dt, amp);
+    printf("Start single network simulation, Network Size = %d, tmax = %.1f ms, dt = %.3f ms, %d itr\n",
                 info.num_cells, info.tmax, _dt, max_step);
     init_progressbar(&bar, max_step);
 
@@ -114,6 +116,7 @@ int main(int argc, char **argv)
         write_cell_fire(ft, cells.id_fire);
 
         memset(cells.ic, 0, cells.num_cells*sizeof(double));
+
         progressbar(&bar, n);
     }
     fprintf(stderr, "\n");
@@ -186,7 +189,8 @@ void read_single_info(char fjson[100], simulinfo_t *info)
     alloc2d(arr, info->p_syn);
 
     info->num_bck = json_object_get_number(root_obj, "num_bck");
-    info->p_fire_bck = json_object_get_number(root_obj, "p_fire_bck");
+    info->p_fire_bck = json_object_get_number(root_obj, "fr_bck");
+    info->p_fire_bck = info->p_fire_bck / 1000 * _dt;
     info->tau_bck = json_object_get_number(root_obj, "tau_bck");
 
     arr = json_object_get_array(root_obj, "g_bck");
@@ -237,18 +241,18 @@ void init_simulation(simulinfo_t *info, neuron_t *cells, syn_t *syns, bcksyn_t *
 
     // init syn structures
     init_bi_ntk(info->num_cells, info->num_cells, &ntk_syns); // synaptic network
-    gen_bi_random_ntk_with_type(info->cell_types, info->p_syn, info->g_syn, &ntk_syns);
-    init_syn_vars(syns, info->num_cells, is_delay_on, delay, cells->v, &ntk_syns);
+    gen_bi_random_ntk_with_type(info->cell_types, info->cell_types, info->p_syn, info->g_syn, &ntk_syns);
+    init_syn_vars(syns, info->num_cells, is_delay_on, delay, cells->v, cells->ic, &ntk_syns);
     free_bi_ntk(&ntk_syns);
 
     int *bck_types = (int*) calloc(info->num_bck, sizeof(int));
     init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck_syns); // background synapse
-    gen_bi_random_ntk_with_type(bck_types, &(info->p_bck), &(info->g_bck), &ntk_bck_syns);
+    gen_bi_random_ntk_with_type(bck_types, info->cell_types, &(info->p_bck), &(info->g_bck), &ntk_bck_syns);
     init_bcksyn_vars(bck_syns, info->num_cells, info->num_bck, info->tau_bck, &ntk_bck_syns);
     free_bi_ntk(&ntk_bck_syns);
 
     // set firing probability of the background synapse
-    for (int n=0; n<info->num_cells; n++){
+    for (int n=0; n<info->num_bck; n++){
         bck_syns->fspk[n] = info->p_fire_bck;
     }
     
@@ -259,10 +263,10 @@ void init_simulation(simulinfo_t *info, neuron_t *cells, syn_t *syns, bcksyn_t *
 void gen_cell_type(int num_cells, double cell_ratio[], int *cell_types)
 {
     int ctp = 0;
-    int num_last = num_cells*cell_ratio[0];
+    int num_last = num_cells*cell_ratio[0]-1;
 
     for (int n=0; n<num_cells; n++){
-        while (n == num_last)
+        while (n > num_last)
         {
             num_last += cell_ratio[++ctp] * num_cells;
         }

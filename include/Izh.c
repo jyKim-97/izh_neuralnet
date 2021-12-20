@@ -53,14 +53,14 @@ void init_cell_vars(neuron_t *cells, int num_cells, int *cell_types)
     cells->id_fire = (int*) malloc(num_cells * sizeof(int));
     for (n=0; n<num_cells; n++){
         // set t_spk & id_fire
-        cells->t_spk[n]    = (int*) malloc(_izh_block_size * sizeof(int));
+        cells->t_spk[n]    = (int*) malloc(_block_size * sizeof(int));
         cells->t_spk[n][0] = -1;
         cells->id_fire[n]  = -1;
     }
 }
 
 
-void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, double *vpost, ntk_t *ntk)
+void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, double *vpost, double *ipost, ntk_t *ntk)
 {
     // set type of the synapse
     syns->is_delay_on = is_delay_on;
@@ -81,9 +81,8 @@ void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, d
     syns->weight      = (double*) malloc(num_syns * sizeof(double));
     syns->veq         = (double*) malloc(num_syns * sizeof(double));
     syns->inv_tau     = (double*) malloc(num_syns * sizeof(double));
-    syns->ptr_vpost   = (double*) malloc(num_syns * sizeof(double));
-    syns->n_post2syn  = (int*) calloc(num_cells, sizeof(int));
-    syns->id_post2syn = (int**) malloc(num_cells * sizeof(int*));
+    syns->ptr_vpost   = (double**) malloc(num_syns * sizeof(double*));
+    syns->ptr_ipost   = (double**) malloc(num_syns * sizeof(double*));
     syns->id_presyn   = (int*) malloc(num_syns * sizeof(int));
 
     if (is_delay_on == 1){
@@ -96,7 +95,7 @@ void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, d
     }
 
     // set variables
-    int pre_type, id_syn=0;
+    int pre_type, id_syn=0, n_post;
 
     for (n=0; n<ntk->num_pre; n++){
         pre_type = ntk->node_types[n];
@@ -104,12 +103,15 @@ void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, d
             syns->veq[id_syn] = CELL_VEQ[pre_type];
             syns->inv_tau[id_syn] = 1/CELL_TAU[pre_type];
             syns->id_presyn[id_syn] = n;
+
+            n_post = ntk->adj_list[n][i];
+            syns->ptr_vpost[id_syn] = vpost + n_post;
+            syns->ptr_ipost[id_syn] = ipost + n_post;
             id_syn++;
         }
     }
 
     // set id
-    map_post2syn(syns, ntk);
     if (is_delay_on == 0){
         map_pre2syn(syns, ntk);
     }
@@ -131,7 +133,7 @@ void init_bcksyn_vars(bcksyn_t *bck_syns, int num_cells, int num_bck, double tau
 
     bck_syns->R = gRatio;
     bck_syns->r       = (double*) calloc(num_bck, sizeof(double));
-    bck_syns->weight  = (double*) malloc(num_bck * num_cells * sizeof(double));
+    bck_syns->weight  = (double*) calloc(num_bck * num_cells, sizeof(double));
     bck_syns->inv_tau = (double*) malloc(num_bck * sizeof(double));
     bck_syns->fspk    = (double*) malloc(num_bck * sizeof(double));
     bck_syns->syn_act = (double*) calloc(num_bck, sizeof(double));
@@ -292,33 +294,27 @@ void update_bcksyns(bcksyn_t *bck_syns)
 
 void add_bcksyn_current(bcksyn_t *bck_syns, neuron_t *cells)
 {
-    int n, N=bck_syns->num_cells;
-    double *isyn = (double*) malloc(N * sizeof(double));
+    int num_cells=bck_syns->num_cells;
+    double *isyn = (double*) calloc(num_cells, sizeof(double));
 
-    for (n=0; n<N; n++){
-        isyn[n] = cells->v[n]; 
-    }
+    cblas_dgemv(CblasColMajor, CblasNoTrans, num_cells, bck_syns->num_bck,
+                1., bck_syns->weight, num_cells, bck_syns->r, 1, 0, isyn, 1);
 
-    vdMul(N, bck_syns->r, isyn, isyn);
-    cblas_dgemv(CblasColMajor, CblasNoTrans, N, N, -1, bck_syns->weight, N, isyn, 1, 1., cells->ic, 1);
-
+    vdMul(num_cells, cells->v, isyn, isyn);
+    cblas_daxpy(num_cells, -1, isyn, 1, cells->ic, 1);
     free(isyn);
 }
 
 
 void add_syn_current(syn_t *syns, neuron_t *cells)
 {
-    int num_syns=syns->num_syns, n, i;
-    int num_cells=syns->num_cells;
+    int num_syns=syns->num_syns, n;
 
     double *isyn = (double*) malloc(num_syns * sizeof(double));
     
     // copy vpost to isyn
-
-    // omp_set_num_threads(10);
-    // #pragma omp parallel for
     for (n=0; n<num_syns; n++){
-        isyn[n] = *(syns->ptr_vpost);
+        isyn[n] = *(syns->ptr_vpost[n]);
     }
 
     // Isyn = weight .* r .* (vpost - veq)
@@ -327,15 +323,8 @@ void add_syn_current(syn_t *syns, neuron_t *cells)
     vdMul(num_syns, syns->weight, isyn, isyn);
 
     // add current to each post-synaptic neuron
-    // #pragma omp parallel for
-    for (n=0; n<num_cells; n++){
-
-        double *ptr_ic = cells->ic+n;
-        int *id_syn = syns->id_post2syn[n];
-
-        for (i=0; i<syns->n_post2syn[n]; i++){
-            *ptr_ic -= isyn[*id_syn++];
-        }
+    for (n=0; n<num_syns; n++){
+        *(syns->ptr_ipost[n]) += isyn[n];
     }
 
     free(isyn);
@@ -483,38 +472,6 @@ void map_pre2syn(syn_t *syns, ntk_t *ntk)
     }
 }
 
-
-void map_post2syn(syn_t *syns, ntk_t *ntk)
-{
-    int n, i, id_post;
-
-    for (n=0; n<syns->num_pre; n++){
-        for (i=0; i<ntk->num_edges[n]; i++){
-            id_post = ntk->adj_list[n][i];
-            syns->n_post2syn[id_post]++;
-        }
-    }
-    
-    // gen post2syn array
-    for (n=0; n<syns->num_cells; n++){
-        syns->id_post2syn[n] = (int*) malloc(syns->n_post2syn[n] * sizeof(int));
-    }
-
-    // fill array
-    int *id_edges = (int*) calloc(syns->num_cells, sizeof(int));
-    int id_syn=0;
-
-    for (n=0; n<ntk->num_pre; n++){
-        for (i=0; i<ntk->num_edges[n]; i++){
-            id_post = ntk->adj_list[n][i];
-            syns->id_post2syn[id_post][id_edges[id_post]++] = id_syn++;
-        }
-    }
-
-    free(id_edges);
-}
-
-
 // get Kuramoto order parameters
 void get_Kuramoto_order_params(int len, neuron_t *cells, double *rK, double *psiK)
 {   
@@ -595,8 +552,8 @@ void append_spike(int nstep, int *id, int **t_spk)
 {
     (*t_spk)[*id] = nstep;
     (*id)++;
-    if (((*id) % _izh_block_size == 0) && (*id > 0)){
-        *t_spk = (int*) realloc(*t_spk, (*id + _izh_block_size) * sizeof(double));
+    if (((*id) % _block_size == 0) && (*id > 0)){
+        *t_spk = (int*) realloc(*t_spk, (*id + _block_size) * sizeof(double));
     }
     (*t_spk)[*id] = -1;
 }
@@ -669,13 +626,8 @@ void free_syns(syn_t *syns)
     free(syns->veq);
     free(syns->inv_tau);
     free(syns->ptr_vpost);
+    free(syns->ptr_ipost);
     free(syns->id_presyn);
-
-    for (n=0; n<syns->num_cells; n++){
-        free(syns->id_post2syn[n]); 
-    }
-    free(syns->id_post2syn);
-    free(syns->n_post2syn);
 
     if (syns->is_delay_on == 1){
         free(syns->delay);
@@ -699,4 +651,3 @@ void free_bcksyns(bcksyn_t *bck_syns)
     free(bck_syns->fspk);
     free(bck_syns->syn_act);
 }
-

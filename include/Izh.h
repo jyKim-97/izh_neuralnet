@@ -2,7 +2,7 @@
 #define _IZH
 
 #define _dt 0.005
-#define _izh_block_size 500
+#define _block_size 500
 #include "ntk.h"
 
 typedef struct _neuron_t
@@ -37,10 +37,8 @@ typedef struct _syn_t
     double R;
     double *r, *weight;
     double *veq, *inv_tau;
-    double *ptr_vpost; // pointer to the voltage of post-neuron
-
-    int *n_post2syn; // (num_cells, )
-    int **id_post2syn; // (num_cells, num_edges)
+    double **ptr_vpost; // pointer to the voltage of post-neuron
+    double **ptr_ipost;
 
     /*** delay_on == 1 ***/
     int *delay;
@@ -86,10 +84,9 @@ typedef struct _writer_t
 
 // init functions
 void init_cell_vars(neuron_t *cells, int num_cells, int *cell_types);
-void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, double *vpost, ntk_t *ntk);
+void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, double *vpost, double *ipost, ntk_t *ntk);
 void init_bcksyn_vars(bcksyn_t *bck_syns, int num_cells, int num_bck, double tau_bck, ntk_t *ntk);
 void map_pre2syn(syn_t *syns, ntk_t *ntk);
-void map_post2syn(syn_t *syns, ntk_t *ntk);
 
 // update functions
 void update_no_delay(int nstep, neuron_t *cells, syn_t *syns, bcksyn_t *bck_syns);
