@@ -47,9 +47,6 @@ void open_file_with_tag(FILE **fid, char tag[], char typename[]);
 void square_current(int n, double *ic, int num_cells, int n0, int n1, double amp);
 
 
-int target_id = 5;
-
-
 int main(int argc, char **argv)
 {
     double amp = 5;
@@ -72,7 +69,7 @@ int main(int argc, char **argv)
     bcksyn_t bck_syns;
 
     gRatio = 1;
-    init_simulation(&info, &cells, &syns, &bck_syns);    
+    init_simulation(&info, &cells, &syns, &bck_syns);
     
     // open writer
     FILE *fv, *fu, *fi, *fr, *ft; // ft is the spike times
