@@ -6,8 +6,7 @@
 #include <sys/time.h>
 
 #include "parson.h"
-#include "Izh.h"
-#include "ntk.h"
+#include "izh.h"
 #include "mt64.h"
 #include "utils.h"
 
@@ -28,8 +27,10 @@ typedef struct _simulinfo_t {
     double g_bck[_n_types]; // coupling strength for each cell types
     double p_bck[_n_types]; // connection probability
 
-    double mu_noise, std_noise;
     double tmax;
+
+    double sq_amp;
+    double sq_inp_t[2];
     
     // name tag of the output file
     char tag[100];
@@ -49,7 +50,6 @@ void square_current(int n, double *ic, int num_cells, int n0, int n1, double amp
 
 int main(int argc, char **argv)
 {
-    double amp = 5;
 
     init_genrand64(101);
 
@@ -57,6 +57,7 @@ int main(int argc, char **argv)
     if (argc == 2){
         strcpy(fname, argv[1]);
     }
+    
 
     // read argument
     simulinfo_t info;
@@ -84,12 +85,18 @@ int main(int argc, char **argv)
     sprintf(fenv, "%s_env.txt", info.tag);
     save_env(fenv, cells.num_cells, info.cell_types,
             syns.num_syns, syns.id_presyn, info.tmax);
-    free(info.cell_types);
 
     // run simulation
     progbar_t bar;
     int max_step = info.tmax / _dt;
-    square_current(-1, NULL, cells.num_cells, 2000/_dt, 2500/_dt, amp);
+
+    int num_exc = 0;
+    for (int i=0; i<info.num_cells; i++){
+        if (info.cell_types[i] != 1){ num_exc++; }
+    }
+    free(info.cell_types);
+
+    square_current(-1, NULL, num_exc, info.sq_inp_t[0]/_dt, info.sq_inp_t[1]/_dt, info.sq_amp);
     printf("Start single network simulation, Network Size = %d, tmax = %.1f ms, dt = %.3f ms, %d itr\n",
                 info.num_cells, info.tmax, _dt, max_step);
     init_progressbar(&bar, max_step);
@@ -196,6 +203,10 @@ void read_single_info(char fjson[100], simulinfo_t *info)
     alloc1d(arr, info->p_bck);
 
     info->tmax = json_object_get_number(root_obj, "max_time");
+
+    info->sq_amp = json_object_get_number(root_obj, "sq_amp");
+    arr = json_object_get_array(root_obj, "sq_inp_t");
+    alloc1d(arr, info->sq_inp_t);
 
     sprintf(info->tag, "%s", json_object_get_string(root_obj, "tag"));
 }

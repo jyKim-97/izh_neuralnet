@@ -17,6 +17,13 @@ ref: https://www.intel.com/content/www/us/en/developer/articles/guide/intel-math
 If you cannot install intel mkl library, add macro on the top of the file "lib/izh.h" #define NO_MKL_LIB  
 This would slow down the code runtime.
 
+# Setup
+* add path
+  * vi ~/.bashrc
+  * export MKLROOT=<PATH_TO_INTEL_MKL: e.g. /opt/intel/mkl>
+  * export IZHROOT=<PATH_TO_IZH_DIRECTORY: e.g. /home/user/izh_neuralnet/>
+  * source ~/.bashrc
+
 # Run
 * make single  
   * Makefile would compile all dependent object files and create run_single.out
@@ -31,5 +38,5 @@ This would slow down the code runtime.
   * 
 
 # Example
-
+* ./run_single.out ./simul_infos/single_ntk.json
 

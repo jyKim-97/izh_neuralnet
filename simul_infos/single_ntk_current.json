@@ -24,8 +24,8 @@
     "p_bck": [
         0.1, 0.1, 0, 0
     ],
-    "sq_amp": 0,
-    "sq_inp_t": [1000, 2000],
-    "max_time": 3000,
-    "tag": "data/single_ntk"
+    "sq_amp": 5,
+    "sq_inp_t": [2950, 3050],
+    "max_time": 5000,
+    "tag": "data/single_ntk_c"
 }
