@@ -1,9 +1,11 @@
 #ifndef _IZH
 #define _IZH
 
-#define _n_types 4
-#define _dt 0.005
+#include "ntk.h"
+
+// #define _dt 0.005
 #define _block_size 500
+double _dt;
 
 typedef struct _neuron_t
 {
@@ -80,17 +82,6 @@ typedef struct _writer_t
 } writer_t;
 
 
-typedef struct _ntk_t {
-
-    int num_pre, num_post;
-    int *node_types;
-    int *num_edges;
-    int **adj_list;
-    double **strength;
-
-} ntk_t;
-
-
 // init functions
 void init_cell_vars(neuron_t *cells, int num_cells, int *cell_types);
 void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, double *vpost, double *ipost, ntk_t *ntk);
@@ -130,14 +121,5 @@ void free_bcksyns(bcksyn_t *bck_syns);
 void save_env(char fname[100], int num_cells, int *cell_types, int num_syns, int *id_presyns, double tmax);
 void write_dat(FILE *fid, int N, double *x);
 void write_cell_fire(FILE *fid, int *id_fire);
-
-// directional network creation
-void init_bi_ntk(int num_pre, int num_post, ntk_t *ntk);
-void gen_bi_random_ntk_with_type(int *pre_node_types, int *post_node_types,
-                            double p_cnt_type[_n_types][_n_types],
-                            double str_cnt_type[_n_types][_n_types], ntk_t *ntk);
-void free_bi_ntk(ntk_t *ntk);
-void append_node(int node_id, int *n_edge, int **adj_list);
-void append_value(double val, int *n_edge, double **val_list);
 
 #endif
