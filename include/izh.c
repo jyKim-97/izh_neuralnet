@@ -83,7 +83,8 @@ void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, d
     syns->inv_tau     = (double*) malloc(num_syns * sizeof(double));
     syns->ptr_vpost   = (double**) malloc(num_syns * sizeof(double*));
     syns->ptr_ipost   = (double**) malloc(num_syns * sizeof(double*));
-    syns->id_presyn   = (int*) malloc(num_syns * sizeof(int));
+    syns->id_pre_neuron   = (int*) malloc(num_syns * sizeof(int));
+    syns->id_post_neuron   = (int*) malloc(num_syns * sizeof(int));
 
     if (is_delay_on == 1){
         syns->delay    = (int*) calloc(num_syns, sizeof(int));
@@ -102,11 +103,13 @@ void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, d
         for (i=0; i<ntk->num_edges[n]; i++){
             syns->veq[id_syn] = CELL_VEQ[pre_type];
             syns->inv_tau[id_syn] = 1/CELL_TAU[pre_type];
-            syns->id_presyn[id_syn] = n;
+            syns->id_pre_neuron[id_syn] = n; 
 
             n_post = ntk->adj_list[n][i];
             syns->ptr_vpost[id_syn] = vpost + n_post;
             syns->ptr_ipost[id_syn] = ipost + n_post;
+            syns->id_post_neuron[id_syn] = n_post;
+
             id_syn++;
         }
     }
@@ -405,8 +408,8 @@ void f_dr_delay(double *dr, double *r, void *arg_syns, void *arg_syn_act)
 
     int num_syns = syns->num_syns;
 
-    // memcpy(dr, r, num_syns * sizeof(double));
-    cblas_dcopy(num_syns, r, 1, dr, 1);
+    memcpy(dr, r, num_syns * sizeof(double));
+    // cblas_dcopy(num_syns, r, 1, dr, 1);
     cblas_dscal(num_syns, -1., dr, 1);
     cblas_daxpy(num_syns, syns->R, syn_act, 1, dr, 1);
     vdMul(num_syns, dr, syns->inv_tau, dr);
@@ -420,7 +423,8 @@ void f_dr_no_delay(double *dr, double *r, void *arg_syns, void *arg_id_fire)
     int *id_fire = (int*) arg_id_fire;
     int i, id_syn, *m = id_fire, num_syns=syns->num_syns;
 
-    cblas_dcopy(num_syns, r, 1, dr, 1);
+    // cblas_dcopy(num_syns, r, 1, dr, 1);
+    memset(dr, 0, sizeof(double) * num_syns);
     cblas_dscal(num_syns, -1., dr, 1);
 
     while (*m != -1){
@@ -442,7 +446,8 @@ void f_dr_bck(double *dr, double *r, void *arg_syns, void *arg_syn_act)
     double *syn_act = (double*) arg_syn_act;
     int N = bck_syns->num_bck;
 
-    cblas_dcopy(N, r, 1, dr, 1);    
+    memcpy(dr ,r, N*sizeof(double));
+    // cblas_dcopy(N, r, 1, dr, 1);    
     cblas_dscal(N, -1., dr, 1);
     cblas_daxpy(N, bck_syns->R, syn_act, 1, dr, 1);
     vdMul(N, bck_syns->inv_tau, dr, dr);
@@ -627,7 +632,8 @@ void free_syns(syn_t *syns)
     free(syns->inv_tau);
     free(syns->ptr_vpost);
     free(syns->ptr_ipost);
-    free(syns->id_presyn);
+    free(syns->id_pre_neuron);
+    free(syns->id_post_neuron);
 
     if (syns->is_delay_on == 1){
         free(syns->delay);

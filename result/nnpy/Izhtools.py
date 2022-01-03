@@ -22,38 +22,43 @@ class Reader:
         self.ts = np.arange(0, self.tmax+self.dt/2, self.dt)
 
     def read_uv(self):
-        self.vs = self._read_byte_data(f'{self.tag}_v.dat')
-        self.us = self._read_byte_data(f'{self.tag}_u.dat')
+        self.vs = read_byte_data(f'{self.tag}_v.dat', self.N)
+        self.us = read_byte_data(f'{self.tag}_u.dat', self.N)
 
     def read_ic(self):
-        self.ics = self._read_byte_data(f'{self.tag}_i.dat')
+        self.ics = read_byte_data(f'{self.tag}_i.dat', self.N)
 
     def read_r(self):
-        self.rs = self._read_byte_data(f'{self.tag}_r.dat')
+        self.rs = read_byte_data(f'{self.tag}_r.dat', self.N)
+        
+    def read_spike(self):
+        self.t_spk = read_tspk(f'{self.tag}_t.txt', self.N, self.ts)
     
-    def read_tspk(self):
-        self.t_spks = [[] for i in range(self.N)]
-        with open(f'{self.tag}_t.txt', "r") as fid:
-            for i in range(len(self.ts)):
-                ids = [int(i) for i in fid.readline().split(',')[:-1]]
-                for j in ids:
-                    self.t_spks[j].append(self.ts[i])
-        for i in range(len(self.t_spks)):
-            self.t_spks[i] = np.array(self.t_spks[i])
 
-    def _read_byte_data(self, fname):
-        with open(fname, "rb") as fid:
-            # line = fid.read()
-            data = np.fromfile(fid, dtype=np.dtype(np.double))
-        nline = len(data) // self.N            
-        # nline = len(line) // self.N // 8  # double
-        # data = np.array(unpack(f"{self.N*nline}d", line))
-        return data.reshape([nline, self.N])
+def read_tspk(fname, N, ts):
+    t_spks = [[] for i in range(N)]
+    with open(fname, "r") as fid:
+        for i in range(len(ts)):
+            ids = [int(i) for i in fid.readline().split(',')[:-1]]
+            for j in ids:
+                t_spks[j].append(ts[i])
+                
+    for i in range(len(t_spks)):
+        t_spks[i] = np.array(t_spks[i])
+        
+    return t_spks
+
+
+def read_byte_data(fname, N):
+    with open(fname, "rb") as fid:
+        data = np.fromfile(fid, dtype=np.dtype(np.double))
+    nline = len(data) // N
+    return data.reshape([nline, N])
 
 
 def get_phase(t_spks, N, ts):
     phase = np.zeros([N, len(ts)])
-    phase[:] = np.nan
+    phase[:] = np.nan 
 
     dt = ts[1]-ts[0]
 

@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     char fenv[100];
     sprintf(fenv, "%s_env.txt", info.tag);
     save_env(fenv, cells.num_cells, info.cell_types,
-            syns.num_syns, syns.id_presyn, info.tmax);
+            syns.num_syns, syns.id_pre_neuron, info.tmax);
 
     // run simulation
     progbar_t bar;

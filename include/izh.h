@@ -34,7 +34,8 @@ typedef struct _syn_t
     int num_syns;  // the # of the synapses
     int num_pre;
 
-    int *id_presyn; // presynaptic neuron id
+    int *id_pre_neuron; // presynaptic neuron id
+    int *id_post_neuron; // postsynaptic neuron id
     
     double R;
     double *r, *weight;

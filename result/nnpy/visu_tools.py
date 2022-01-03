@@ -21,7 +21,7 @@ def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s
             
     c = np.array(c)
         
-    plt.scatter(x, y, s=s, color=c)
+    plt.scatter(x, y, s=s, c=c)
     if xlim is not None:
         plt.xlim(xlim)
     if ylim is None:
