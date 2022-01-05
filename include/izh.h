@@ -17,8 +17,8 @@ typedef struct _neuron_t
     double mu_wn, std_wn; // white noise
 
     // spike info
-    int *id_spk; // index to append the new spike
-    int **t_spk; // activated steps for each neuron
+    int *num_spk; // index to append the new spike
+    int **t_spk;  // activated steps for each neuron
     int *id_fire; // activated cell id
 
 } neuron_t;
@@ -84,6 +84,7 @@ typedef struct _writer_t
 
 
 // init functions
+void init_random_stream(long int seed);
 void init_cell_vars(neuron_t *cells, int num_cells, int *cell_types);
 void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, double *vpost, double *ipost, ntk_t *ntk);
 void init_bcksyn_vars(bcksyn_t *bck_syns, int num_cells, int num_bck, double tau_bck, ntk_t *ntk);
@@ -109,6 +110,9 @@ void f_dr_delay(double *dr, double *r, void *arg_syns, void *arg_syn_act);
 void f_dr_no_delay(double *dr, double *r, void *arg_syns, void *arg_id_fire);
 void f_dr_bck(double *dr, double *r, void *arg_syns, void *arg_syn_act);
 
+// mathematical functions
+double get_avg(int num_x, double *x);
+
 // Kuramoto order parameter
 void get_Kuramoto_order_params(int len, neuron_t *cells, double *rK, double *psiK);
 void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase);
@@ -117,6 +121,7 @@ void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase);
 void free_cells(neuron_t *cells);
 void free_syns(syn_t *syns);
 void free_bcksyns(bcksyn_t *bck_syns);
+void reset_spike(neuron_t *cells);
 
 // save data
 void save_env(char fname[100], int num_cells, int *cell_types, int num_syns, int *id_presyns, double tmax);

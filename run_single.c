@@ -51,13 +51,13 @@ void square_current(int n, double *ic, int num_cells, int n0, int n1, double amp
 int main(int argc, char **argv)
 {
 
-    init_genrand64(101);
+    // init_random_stream(time(NULL));
+    init_genrand64(time(NULL));
 
     char fname[100] = "./simul_infos/single_ntk.json";
     if (argc == 2){
         strcpy(fname, argv[1]);
     }
-    
 
     // read argument
     simulinfo_t info;

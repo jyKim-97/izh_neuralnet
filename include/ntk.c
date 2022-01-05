@@ -60,6 +60,59 @@ void gen_bi_random_ntk_with_type(int *pre_node_types, int *post_node_types,
 }
 
 
+void gen_bi_random_ntk_fixed_indeg(int *pre_node_types, int *post_node_types,
+                                double p_cnt_type[_n_types][_n_types],
+                                double str_cnt_type[_n_types][_n_types], ntk_t *ntk)
+{
+    memcpy(ntk->node_types, pre_node_types, ntk->num_pre * sizeof(int));
+    
+    int num_types[_n_types] = {0,};
+    int id_boundary[_n_types] = {0,};
+    int *ptr_ctp = pre_node_types;
+
+    for (int i=0; i<ntk->num_pre; i++){
+        id_boundary[*ptr_ctp] = i;
+        num_types[*ptr_ctp]++; 
+        ptr_ctp++;        
+    }
+
+    for (int i=_n_types-1; i>0; i--){
+        id_boundary[i] = id_boundary[i-1]+1;
+    }
+    id_boundary[0] = 0;
+
+    int num_in_deg;
+    int post_tp;
+    int *used = (int*) malloc(ntk->num_pre * sizeof(int));
+
+    for (int i=0; i<ntk->num_post; i++){
+        post_tp = post_node_types[i];
+        for (int pre_tp=0; pre_tp<_n_types; pre_tp++){
+            num_in_deg = p_cnt_type[pre_tp][post_tp] * num_types[pre_tp];
+            memset(used, 0, ntk->num_pre * sizeof(int));
+
+            int pre_id, j=0, a=id_boundary[pre_tp], num=num_types[pre_tp];
+            double s = str_cnt_type[pre_tp][post_tp];
+
+            while (j < num_in_deg){
+                pre_id = genrand64_real2()*num + a;
+                if (used[pre_id] == 0){
+
+                    int *ptr_num_edge = ntk->num_edges + pre_id;
+
+                    append_node(i, ptr_num_edge, ntk->adj_list+pre_id);
+                    (*ptr_num_edge)--;
+                    append_value(s, ptr_num_edge, ntk->strength+pre_id);
+
+                    used[pre_id] = 1;
+                    j++;
+                }
+            }
+        }
+    }
+}
+
+
 void free_bi_ntk(ntk_t *ntk)
 {   
     free(ntk->node_types);

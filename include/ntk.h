@@ -19,6 +19,9 @@ void init_bi_ntk(int num_pre, int num_post, ntk_t *ntk);
 void gen_bi_random_ntk_with_type(int *pre_node_types, int *post_node_types,
                             double p_cnt_type[_n_types][_n_types],
                             double str_cnt_type[_n_types][_n_types], ntk_t *ntk);
+void gen_bi_random_ntk_fixed_indeg(int *pre_node_types, int *post_node_types,
+                            double p_cnt_type[_n_types][_n_types],
+                            double str_cnt_type[_n_types][_n_types], ntk_t *ntk);
 void free_bi_ntk(ntk_t *ntk);
 void append_node(int node_id, int *n_edge, int **adj_list);
 void append_value(double val, int *n_edge, double **val_list);

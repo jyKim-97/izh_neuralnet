@@ -30,5 +30,7 @@ def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s
     plt.xlabel('time (ms)', fontsize=12)
     yt = [0, ylim[1]//2, ylim[1]]
     plt.yticks(yt, labels=['#%d'%(i) for i in yt])
+    
+    return x, y, c
 
 

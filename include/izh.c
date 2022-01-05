@@ -4,10 +4,11 @@
 #include <math.h>
 #include "mt64.h"
 #include "mkl.h"
+#include "mkl_vsl.h"
 #include "izh.h"
 
 #define PI 3.14159265359
-
+VSLStreamStatePtr rand_stream;
 
 const double CELL_CONST[_n_types][4] = {
             {0.02, 0.2, -65, 8},    // RS
@@ -20,6 +21,14 @@ double CELL_TAU[_n_types] = {5, 6, 5, 5};
 
 double gRatio = 1;
 double _dt = 0.005;
+
+
+void init_random_stream(long int seed)
+{
+    vslNewStream(&rand_stream, VSL_BRNG_MT19937, seed);
+    init_genrand64(seed);
+}
+
 
 void init_cell_vars(neuron_t *cells, int num_cells, int *cell_types)
 {
@@ -48,7 +57,7 @@ void init_cell_vars(neuron_t *cells, int num_cells, int *cell_types)
     }
 
     // init spike params
-    cells->id_spk = (int*) calloc(num_cells,  sizeof(int));
+    cells->num_spk = (int*) calloc(num_cells,  sizeof(int));
     cells->t_spk = (int**) malloc(num_cells * sizeof(int*));
     cells->id_fire = (int*) malloc(num_cells * sizeof(int));
     for (n=0; n<num_cells; n++){
@@ -215,7 +224,7 @@ void update_cells(int nstep, neuron_t *cells)
     // append spike to t_spk
     ptr_id = cells->id_fire;
     while (*ptr_id > -1){
-        append_spike(nstep, cells->id_spk + *ptr_id, cells->t_spk + *ptr_id);
+        append_spike(nstep, cells->num_spk + *ptr_id, cells->t_spk + *ptr_id);
         ptr_id++;
     }
 
@@ -275,15 +284,22 @@ void update_bcksyns(bcksyn_t *bck_syns)
 
     int n, N=bck_syns->num_bck;
     // gen spike
-    double p;
+    double *parr = (double*) malloc(sizeof(double)*N);
+    double *ptr_p;
+    // double p;
+
+    vdRngUniform(VSL_RNG_METHOD_UNIFORM_STD, rand_stream, N, parr, 0, 1);
+    ptr_p = parr;
 
     memset(bck_syns->syn_act, 0, N*sizeof(double));
     for (n=0; n<N; n++){
-        p = genrand64_real2();
-        if (p < bck_syns->fspk[n]){
+        // p = genrand64_real2();
+        if (*ptr_p++ < bck_syns->fspk[n]){
             bck_syns->syn_act[n] = 1;
         }
     }
+
+    free(parr);
 
     // update state variable - r
     double *dr = (double*) malloc(N * sizeof(double));
@@ -424,7 +440,8 @@ void f_dr_no_delay(double *dr, double *r, void *arg_syns, void *arg_id_fire)
     int i, id_syn, *m = id_fire, num_syns=syns->num_syns;
 
     // cblas_dcopy(num_syns, r, 1, dr, 1);
-    memset(dr, 0, sizeof(double) * num_syns);
+    // memset(dr, 0, sizeof(double) * num_syns);
+    memcpy(dr, r, num_syns * sizeof(double));
     cblas_dscal(num_syns, -1., dr, 1);
 
     while (*m != -1){
@@ -446,7 +463,7 @@ void f_dr_bck(double *dr, double *r, void *arg_syns, void *arg_syn_act)
     double *syn_act = (double*) arg_syn_act;
     int N = bck_syns->num_bck;
 
-    memcpy(dr ,r, N*sizeof(double));
+    memcpy(dr, r, N*sizeof(double));
     // cblas_dcopy(N, r, 1, dr, 1);    
     cblas_dscal(N, -1., dr, 1);
     cblas_daxpy(N, bck_syns->R, syn_act, 1, dr, 1);
@@ -488,7 +505,7 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, double *rK, double *psi
     sum_imag = (double*) malloc(sizeof(double) * len);
 
     for (n=0; n<num_cells; n++){
-        get_spike_phase(cells->id_spk[n], len, cells->t_spk[n], phase);
+        get_spike_phase(cells->num_spk[n], len, cells->t_spk[n], phase);
 
         ptr_sr = sum_real;
         ptr_si = sum_imag;
@@ -508,7 +525,7 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, double *rK, double *psi
     ptr_si = sum_imag;
     ptr_p  = psiK;
     for (i=0; i<len; i++){
-        *ptr_p++ = atan2(*ptr_si++, *ptr_sr++);
+        *ptr_p++ = atan2(*ptr_si++, *ptr_sr++); // +- phi
     }
 
     cblas_dnrm2(len, sum_real, 1);
@@ -564,6 +581,31 @@ void append_spike(int nstep, int *id, int **t_spk)
 }
 
 
+double get_avg(int num_x, double *x)
+{   
+    // get average of the x
+    double x_avg = 0;
+    for (int n=0; n<num_x; n++){
+        x_avg += x[n];
+    }
+    x_avg /= num_x;
+    
+    // x_avg /= num_x;
+    return x_avg;
+}
+
+
+void reset_spike(neuron_t *cells)
+{
+    for (int n=0; n<cells->num_cells; n++){
+        for (int i=0; i<cells->num_spk[n]; i++){
+            cells->t_spk[n][i] = 0;
+        }
+        cells->num_spk[n] = 0;
+    }
+}
+
+
 void save_env(char fname[100], int num_cells, int *cell_types, int num_syns, int *id_presyns, double tmax)
 {
     FILE *fid = fopen(fname, "w");
@@ -612,7 +654,7 @@ void free_cells(neuron_t *cells)
     free(cells->b);
     free(cells->c);
     free(cells->d);
-    free(cells->id_spk);
+    free(cells->num_spk);
     free(cells->id_fire);
 
     for (int n=0; n<cells->num_cells; n++){

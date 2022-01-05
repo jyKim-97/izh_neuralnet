@@ -80,3 +80,4 @@ def get_raster_plot(t_spks, cell_types):
             cs.append(cell_colors[ctp])
     
     return ts, id_spks, cs
+
