@@ -427,7 +427,7 @@ void f_dr_delay(double *dr, double *r, void *arg_syns, void *arg_syn_act)
     memcpy(dr, r, num_syns * sizeof(double));
     // cblas_dcopy(num_syns, r, 1, dr, 1);
     cblas_dscal(num_syns, -1., dr, 1);
-    cblas_daxpy(num_syns, syns->R, syn_act, 1, dr, 1);
+    cblas_daxpy(num_syns, syns->R/_dt, syn_act, 1, dr, 1);
     vdMul(num_syns, dr, syns->inv_tau, dr);
     cblas_dscal(num_syns, _dt, dr, 1);
 }
@@ -447,7 +447,7 @@ void f_dr_no_delay(double *dr, double *r, void *arg_syns, void *arg_id_fire)
     while (*m != -1){
         for (i=0; i<syns->n_pre2syn[*m]; i++){
             id_syn = syns->id_pre2syn[*m][i];
-            dr[id_syn] += syns->R;
+            dr[id_syn] += syns->R/_dt;
         }
         m++;
     }
@@ -463,10 +463,11 @@ void f_dr_bck(double *dr, double *r, void *arg_syns, void *arg_syn_act)
     double *syn_act = (double*) arg_syn_act;
     int N = bck_syns->num_bck;
 
+    // check calculateion
+
     memcpy(dr, r, N*sizeof(double));
-    // cblas_dcopy(N, r, 1, dr, 1);    
     cblas_dscal(N, -1., dr, 1);
-    cblas_daxpy(N, bck_syns->R, syn_act, 1, dr, 1);
+    cblas_daxpy(N, bck_syns->R/_dt, syn_act, 1, dr, 1);
     vdMul(N, bck_syns->inv_tau, dr, dr);
     cblas_dscal(N, _dt, dr, 1);
 }

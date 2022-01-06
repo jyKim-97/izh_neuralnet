@@ -5,7 +5,7 @@
 
 // #define _dt 0.005
 #define _block_size 500
-double _dt;
+extern double _dt;
 
 typedef struct _neuron_t
 {

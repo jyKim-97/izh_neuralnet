@@ -10,9 +10,6 @@
 #include "mt64.h"
 #include "utils.h"
 
-extern double gRatio; // from Izh.c
-extern double CELL_TAU[_n_types];
-
 typedef struct _simulinfo_t {
 
     int num_cells;
@@ -47,12 +44,14 @@ void open_dat_with_tag(FILE **fid, char tag[], char typename[]);
 void open_file_with_tag(FILE **fid, char tag[], char typename[]);
 void square_current(int n, double *ic, int num_cells, int n0, int n1, double amp);
 
+extern double gRatio; // from Izh.c
+extern double CELL_TAU[_n_types];
+extern double _dt;
 
 int main(int argc, char **argv)
 {
 
-    // init_random_stream(time(NULL));
-    init_genrand64(time(NULL));
+    init_random_stream(time(NULL));
 
     char fname[100] = "./simul_infos/single_ntk.json";
     if (argc == 2){
@@ -69,7 +68,7 @@ int main(int argc, char **argv)
     syn_t syns;
     bcksyn_t bck_syns;
 
-    gRatio = 1;
+    gRatio = 0.01;
     init_simulation(&info, &cells, &syns, &bck_syns);
     
     // open writer
