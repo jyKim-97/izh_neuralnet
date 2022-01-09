@@ -2,26 +2,39 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+#include <mkl.h>
+#include <mkl_vsl.h>
 #include "mt64.h"
-#include "mkl.h"
-#include "mkl_vsl.h"
 #include "izh.h"
 
+// set simulation env variable
+
+#define USE_MKL_MEM
+#define sz_d sizeof(double)
+#define sz_i sizeof(int)
+
+#ifdef USE_MKL_MEM
+
+#define ALIGN_SIZE
+#define malloc_c(size) MKL_malloc(size, 32)
+#define calloc_c(len, var_size) MKL_calloc(len, var_size, 32)
+#define free_c(arr) MKL_free(arr)
+
+#else
+
+#define malloc_c(size) malloc(size)
+#define calloc_c(len, var_size) calloc(len, var_size)
+#define free_c(arr) free(arr)
+
+#endif
+
 #define PI 3.14159265359
+#define _block_size 500
 VSLStreamStatePtr rand_stream;
 
-const double CELL_CONST[_n_types][4] = {
-            {0.02, 0.2, -65, 8},    // RS
-            {0.1, 0.2, -65, 2},   // FS
-            {0.02, 0.2, -55, 4},    // IB
-            {0.02, 0.2, -50, 2}};   // CH
-
-double CELL_VEQ[_n_types] = {0, -70, 0, 0};
-double CELL_TAU[_n_types] = {5, 6, 5, 5};
-
-double gRatio = 1;
-double _dt = 0.005;
-
+double _dt = 0.005; // simulation time step
+double _R  = 0.001;  // 
 
 void init_random_stream(long int seed)
 {
@@ -29,674 +42,403 @@ void init_random_stream(long int seed)
     init_genrand64(seed);
 }
 
+// Background synapse firing probability 처리?
 
-void init_cell_vars(neuron_t *cells, int num_cells, int *cell_types)
+void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int *cell_types)
 {
-    int n, ctp;
     cells->num_cells = num_cells;
-
-    cells->v  = (double*) malloc(num_cells * sizeof(double));
-    cells->u  = (double*) calloc(num_cells,  sizeof(double));
-    cells->ic = (double*) calloc(num_cells,  sizeof(double));
-    cells->a  = (double*) malloc(num_cells * sizeof(double));
-    cells->b  = (double*) malloc(num_cells * sizeof(double));
-    cells->c  = (double*) malloc(num_cells * sizeof(double));
-    cells->d  = (double*) malloc(num_cells * sizeof(double));
     
+    cells->v  = (double*) malloc_c(sz_d * num_cells);
+    cells->u  = (double*) malloc_c(sz_d * num_cells);
+    cells->ic = (double*) malloc_c(sz_d * num_cells);
+    cells->a  = (double*) malloc_c(sz_d * num_cells);
+    cells->b  = (double*) malloc_c(sz_d * num_cells);
+    cells->c  = (double*) malloc_c(sz_d * num_cells);
+    cells->d  = (double*) malloc_c(sz_d * num_cells);
+
     // allocate cell params
-    for (n=0; n<cells->num_cells; n++)
-    {
-        // cells->v[n] = genrand64_real2() * 10 - 70;
+    for (int n=0; n<num_cells; n++){
         cells->v[n] = -70;
+        cells->u[n] = 0;
         // set parameters
-        ctp = cell_types[n];
-        cells->a[n] = CELL_CONST[ctp][0];
-        cells->b[n] = CELL_CONST[ctp][1];
-        cells->c[n] = CELL_CONST[ctp][2];
-        cells->d[n] = CELL_CONST[ctp][3];
+        int ctp = cell_types[n];
+        cells->a[n] = cell_params[ctp][0];
+        cells->b[n] = cell_params[ctp][1];
+        cells->c[n] = cell_params[ctp][2];
+        cells->d[n] = cell_params[ctp][3];
     }
 
-    // init spike params
-    cells->num_spk = (int*) calloc(num_cells,  sizeof(int));
-    cells->t_spk = (int**) malloc(num_cells * sizeof(int*));
-    cells->id_fire = (int*) malloc(num_cells * sizeof(int));
-    for (n=0; n<num_cells; n++){
-        // set t_spk & id_fire
-        cells->t_spk[n]    = (int*) malloc(_block_size * sizeof(int));
-        cells->t_spk[n][0] = -1;
-        cells->id_fire[n]  = -1;
+    // init spike parameters
+    cells->num_spk = (int*) calloc(num_cells, sz_i);
+    cells->t_fired = (int**) malloc(sizeof(int*) * num_cells);
+    cells->id_fired_neuron = (int*) malloc(sz_i * num_cells);
+
+    for (int n=0; n<num_cells; n++){
+        cells->t_fired[n] = (int*) malloc(sz_i * _block_size);
+        cells->t_fired[n][0] = -1;
+        cells->id_fired_neuron[n] = -1;
     }
 }
 
 
-void init_syn_vars(syn_t *syns, int num_cells, int is_delay_on, double *delay, double *vpost, double *ipost, ntk_t *ntk)
+void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double cell_veq[], double cell_tau[], double *vpost, double *ipost)
 {
-    // set type of the synapse
-    syns->is_delay_on = is_delay_on;
-    
-    syns->num_cells = num_cells;
-    syns->num_pre = num_cells;
-
-    // get the # of syns
-    int n, i, num_syns=0;
-    for (n=0; n<ntk->num_pre; n++){
+    int num_syns = 0;
+    for (int n=0; n<num_pres; n++){
         num_syns += ntk->num_edges[n];
     }
     syns->num_syns = num_syns;
+    syns->num_pres = num_pres;
+    syns->type = type;
 
     // create objs
-    syns->R = gRatio;
-    syns->r           = (double*) calloc(num_syns, sizeof(double));
-    syns->weight      = (double*) malloc(num_syns * sizeof(double));
-    syns->veq         = (double*) malloc(num_syns * sizeof(double));
-    syns->inv_tau     = (double*) malloc(num_syns * sizeof(double));
-    syns->ptr_vpost   = (double**) malloc(num_syns * sizeof(double*));
-    syns->ptr_ipost   = (double**) malloc(num_syns * sizeof(double*));
-    syns->id_pre_neuron   = (int*) malloc(num_syns * sizeof(int));
-    syns->id_post_neuron   = (int*) malloc(num_syns * sizeof(int));
-
-    if (is_delay_on == 1){
-        syns->delay    = (int*) calloc(num_syns, sizeof(int));
-        syns->id_pre   = (int*) malloc(num_syns * sizeof(int));
-        syns->id_t_spk = (int*) calloc(num_syns, sizeof(int));
-    } else { // used to update firing
-        syns->n_pre2syn  = (int*) calloc(syns->num_pre,  sizeof(int));
-        syns->id_pre2syn = (int**) malloc(syns->num_pre * sizeof(int*));
+    if (syns->type == DELAY){
+        syns->r = (double*) mallo_c(sz_d * num_syns);
+        syns->inv_tau = (double*) mallo_c(sz_d * num_syns);
+        syns->ptr_r = NULL;
+    } else {
+        syns->r = (double*) malloc_c(sz_d * num_pres);
+        syns->inv_tau = (double*) mallo_c(sz_d * num_pres);
+        syns->ptr_r = (double**) malloc(sizeof(double*) * num_syns);
     }
 
-    // set variables
-    int pre_type, id_syn=0, n_post;
+    syns->weight = (double*) malloc_c(sz_d * num_syns);
+    syns->veq    = (double*) malloc_c(sz_d * num_syns);
 
-    for (n=0; n<ntk->num_pre; n++){
-        pre_type = ntk->node_types[n];
-        for (i=0; i<ntk->num_edges[n]; i++){
-            syns->veq[id_syn] = CELL_VEQ[pre_type];
-            syns->inv_tau[id_syn] = 1/CELL_TAU[pre_type];
-            syns->id_pre_neuron[id_syn] = n; 
+    syns->ptr_vpost = (double*) malloc(sizeof(double*) * num_syns);
+    syns->ptr_ipost = (double*) malloc(sizeof(double*) * num_syns);
 
-            n_post = ntk->adj_list[n][i];
+    syns->id_pre_neuron  = (int*) malloc(sz_i * num_syns);
+    syns->id_post_neuron = (int*) malloc(sz_i * num_syns);
+
+    if (syns->type == BACKGROUND){
+        syns->p_fire = (double*) malloc(sz_d * num_pres);
+        syns->delay = NULL;
+    } else if (syns->type == DELAY){
+        syns->delay = (int*) malloc(sz_i * num_syns);
+        syns->p_fire = NULL;
+    } else {
+        syns->p_fire = NULL;
+        syns->delay  = NULL;
+    }
+
+    // set varaibles
+    int id_syn = 0;
+    for (int n=0; n<num_pres; n++){
+        int pre_type = ntk->node_types[n];
+        for (int i=0; i<ntk->num_edges[n]; i++){
+            syns->veq[id_syn] = cell_veq[pre_type];
+            // syns->inv_tau[id_syn] = 1/cell_tau[pre_type];
+            syns->weight[id_syn] = ntk->strength[n][i];
+
+            int n_post = ntk->adj_list[n][i];
             syns->ptr_vpost[id_syn] = vpost + n_post;
-            syns->ptr_ipost[id_syn] = ipost + n_post;
-            syns->id_post_neuron[id_syn] = n_post;
+            syns->ptr_ipost[id_syn] = vpost + n_post;
+
+            syns->id_pre_neuron[id_syn]  = n;
+            syns->id_post_neuron[id_syn] = n;
+
+            if (syns->type == DELAY){
+                syns->inv_tau[id_syn] = 1/cell_tau[pre_type];
+            } else {
+                syns->ptr_r[id_syn] = syns->r + n;
+            }
 
             id_syn++;
         }
-    }
 
-    // set id
-    if (is_delay_on == 0){
-        map_pre2syn(syns, ntk);
-    }
-
-    // allocate synapse weight
-    id_syn=0;
-    for (n=0; n<num_cells; n++){
-        for (i=0; i<ntk->num_edges[n]; i++) {
-            syns->weight[id_syn++] = ntk->strength[n][i];
+        if (syns->type < 2){
+            syns->inv_tau[n] = 1/cell_veq[pre_type];
         }
     }
 }
 
 
-void init_bcksyn_vars(bcksyn_t *bck_syns, int num_cells, int num_bck, double tau_bck, ntk_t *ntk)
+void add_isyn_bck(syn_t *syns)
 {
-    bck_syns->num_cells = num_cells;
-    bck_syns->num_bck   = num_bck;
+    /*** ic -= weight * (vpost - veq) ***/
+    int N = syns->num_syns;
 
-    bck_syns->R = gRatio;
-    bck_syns->r       = (double*) calloc(num_bck, sizeof(double));
-    bck_syns->weight  = (double*) calloc(num_bck * num_cells, sizeof(double));
-    bck_syns->inv_tau = (double*) malloc(num_bck * sizeof(double));
-    bck_syns->fspk    = (double*) malloc(num_bck * sizeof(double));
-    bck_syns->syn_act = (double*) calloc(num_bck, sizeof(double));
+    // double *vpost = read_ptr(N, syns->ptr_vpost);
+    double *rsyns = read_ptr(N, syns->ptr_r);
 
-    // set variables
-    int n;
-    for (n=0; n<num_bck; n++){
-        bck_syns->inv_tau[n] = 1/tau_bck;
+    double *isyn = read_ptr(N, syns->ptr_vpost); // vpost
+    // cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
+    vdMul(N, syns->weight, isyn, isyn);
+
+    for (int n=0; n<N; n++){
+        (*syns->ptr_ipost)[n] -= isyn[n];
     }
 
-    // allocate synapse weight
-    int i,id_pre,id_post;
-    for (id_pre=0; id_pre<num_bck; id_pre++){
-        for (i=0; i<ntk->num_edges[id_pre]; i++){
-            id_post = ntk->adj_list[id_pre][i];
-            // column-major matrix, row is the post
-            n = id_pre * num_cells + id_post;
-            bck_syns->weight[n] = ntk->strength[id_pre][i];
-        }
+    free_c(isyn);
+    free_c(rsyns);
+}
+
+
+void add_isyn(syn_t *syns)
+{
+    /*** ic -= weight * (vpost - veq) ***/
+    int N = syns->num_syns;
+
+    // double *vpost = read_ptr(N, syns->ptr_vpost);
+    double *rsyns = read_ptr(N, syns->ptr_r);
+
+    double *isyn = read_ptr(N, syns->ptr_vpost); // vpost
+    cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
+    vdMul(N, syns->weight, isyn, isyn);
+    vdMul(N, rsyns, isyn, isyn);
+
+    for (int n=0; n<N; n++){
+        (*syns->ptr_ipost)[n] -= isyn[n];
     }
+
+    free_c(isyn);
+    free_c(rsyns);
 }
 
 
-void update_no_delay(int nstep, neuron_t *cells, syn_t *syns, bcksyn_t *bck_syns)
-{   
-    #ifndef _NO_EXT_SYN
-    update_bcksyns(bck_syns);
-    add_bcksyn_current(bck_syns, cells);
-    #endif
-
-    add_syn_current(syns, cells);
-    update_cells(nstep, cells);
-    update_syns_no_delay(nstep, syns, cells->id_fire);
-}
-
-
-void update_delay(int nstep, neuron_t *cells, syn_t *syns, bcksyn_t *bck_syns)
+void add_isyn_delay(syn_t *syns)
 {
-    #ifndef _NO_EXT_SYN
-    update_bcksyns(bck_syns);
-    add_bcksyn_current(bck_syns, cells);
-    #endif
+    /*** ic -= weight * (vpost - veq) ***/
+    int N = syns->num_syns;
 
-    add_syn_current(syns, cells);
-    update_cells(nstep, cells);
-    update_syns_delay(nstep, syns, cells->t_spk);
+    double *isyn = read_ptr(N, syns->ptr_vpost); // vpost
+    cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
+    vdMul(N, syns->weight, isyn, isyn);
+    vdMul(N, syns->r, isyn, isyn);
+
+    for (int n=0; n<N; n++){
+        (*syns->ptr_ipost)[n] -= isyn[n];
+    }
+
+    free_c(isyn);
 }
 
 
-void update_cells(int nstep, neuron_t *cells)
+void update_neurons(neuron_t *cells, int nstep, int *id_fired_neuron)
 {
-    int n, N = cells->num_cells;
-    double *dv, *du;
+    int N = cells->num_cells;
+    double *dv = solve_deq_using_rk4(f_dv, N, cells->v, (void*) cells, NULL);
+    double *du = solve_deq_using_rk4(f_dv, N, cells->v, (void*) cells, NULL);
 
-    dv = (double*) malloc(N * sizeof(double));
-    du = (double*) malloc(N * sizeof(double));
-    solve_deq_using_rk4(f_dv, N, dv, cells->v, cells, NULL);
-    solve_deq_using_rk4(f_du, N, du, cells->u, cells, NULL);
     cblas_daxpy(N, 1, dv, 1, cells->v, 1);
-    cblas_daxpy(N, 1, du, 1, cells->u, 1);
+    cblas_daxpy(N, 1, dv, 1, cells->v, 1);
 
     // check spike
     double *ptr_v = cells->v;
-    int *ptr_id = cells->id_fire;
-
-    for (n=0; n<N; n++){
+    int *ptr_id = id_fired_neuron;
+    for (int n=0; n<N; n++){
         if (*ptr_v > 30){
             *ptr_id++ = n;
             *ptr_v = cells->c[n];
             cells->u[n] += cells->d[n];
+
+            // append spike
+            append_spike(nstep, cells->num_spk+n, cells->t_fired+n);
         }
-        ptr_v++;
     }
     *ptr_id = -1;
 
-    // append spike to t_spk
-    ptr_id = cells->id_fire;
-    while (*ptr_id > -1){
-        append_spike(nstep, cells->num_spk + *ptr_id, cells->t_spk + *ptr_id);
-        ptr_id++;
-    }
-
-    free(dv); free(du);
+    free_c(dv);
+    free_c(du);
 }
 
 
-void update_syns_no_delay(int nstep, syn_t *syns, void *id_fire_tmp)
+void update_syns_no_delay(syn_t *syns, int *id_fired_neuron)
 {
-    int *id_fire = (int*) id_fire_tmp;
-    int num_syn=syns->num_syns;
-    double *dr = (double*) malloc(num_syn * sizeof(double));
-
-    solve_deq_using_rk4(f_dr_no_delay, num_syn, dr, syns->r, syns, id_fire);
-
-    cblas_daxpy(num_syn, 1, dr, 1, syns->r, 1);
-
-    free(dr);
+    double *dr = solve_deq_using_rk4(f_dr_syns_no_delay,
+                        syns->num_pres, syns->r, (void*) syns, (void*) id_fired_neuron);
+    cblas_daxpy(syns->num_pres, 1, dr, 1, syns->r, 1);
+    free_c(dr);
 }
 
 
-void update_syns_delay(int nstep, syn_t *syns, int **t_spk)
-{   
-    int num_syns=syns->num_syns, n;
+void update_syns_delay(syn_t *syns)
+{
+    /*** TODO: fill this function ***/
+}
 
-    // get activated synapse
-    double *syn_act = (double*) calloc(num_syns, sizeof(double));
-    double R = syns->R;
-    int t0, dt;
 
-    // #pragma omp parallel for
-    for (n=0; n<num_syns; n++){
-        int *ptr_spk = syns->id_t_spk + n;
-
-        t0 = t_spk[syns->id_pre[n]][*ptr_spk];
-        dt = nstep - t0 - syns->delay[n];
-
-        if (dt == 0){
-            syn_act[n] = R;
-            (*ptr_spk)++;
+int *gen_bck_spike(syn_t *bck_syns)
+{
+    int N = bck_syns->num_pres;
+    double *p = (double*) malloc_c(sz_d * N);
+    
+    vdRngUniform(VSL_RNG_METHOD_UNIFORM_STD, rand_stream, N, p, 0, 1);
+    
+    int *id_fired_bck = (int*) calloc_c(N, sz_i);
+    for (int n=0; n<N; n++){
+        if (p[n] < bck_syns->p_fire[n]){
+            id_fired_bck[n] = 1;
         }
     }
 
-    // update r
-    double *dr = (double*) malloc(num_syns * sizeof(double));
-
-    solve_deq_using_rk4(f_dr_delay, syns->num_syns, dr, syns->r, syns, syn_act);
-    cblas_daxpy(syns->num_syns, 1., dr, 1, syns->r, 1);
-
-    free(syn_act);
-    free(dr);
+    free_c(p);
+    return id_fired_bck;
 }
 
 
-void update_bcksyns(bcksyn_t *bck_syns)
+double *f_dv(double *v, void *arg_neuron, void *arg_null)
 {
-
-    int n, N=bck_syns->num_bck;
-    // gen spike
-    double *parr = (double*) malloc(sizeof(double)*N);
-    double *ptr_p;
-    // double p;
-
-    vdRngUniform(VSL_RNG_METHOD_UNIFORM_STD, rand_stream, N, parr, 0, 1);
-    ptr_p = parr;
-
-    memset(bck_syns->syn_act, 0, N*sizeof(double));
-    for (n=0; n<N; n++){
-        // p = genrand64_real2();
-        if (*ptr_p++ < bck_syns->fspk[n]){
-            bck_syns->syn_act[n] = 1;
-        }
-    }
-
-    free(parr);
-
-    // update state variable - r
-    double *dr = (double*) malloc(N * sizeof(double));
-
-    solve_deq_using_rk4(f_dr_bck, N, dr, bck_syns->r, bck_syns, bck_syns->syn_act);
-    cblas_daxpy(N, 1., dr, 1, bck_syns->r, 1);
-
-    free(dr);
-}
-
-
-void add_bcksyn_current(bcksyn_t *bck_syns, neuron_t *cells)
-{
-    int num_cells=bck_syns->num_cells;
-    double *isyn = (double*) calloc(num_cells, sizeof(double));
-
-    cblas_dgemv(CblasColMajor, CblasNoTrans, num_cells, bck_syns->num_bck,
-                1., bck_syns->weight, num_cells, bck_syns->r, 1, 0, isyn, 1);
-
-    vdMul(num_cells, cells->v, isyn, isyn);
-    cblas_daxpy(num_cells, -1, isyn, 1, cells->ic, 1);
-    free(isyn);
-}
-
-
-void add_syn_current(syn_t *syns, neuron_t *cells)
-{
-    int num_syns=syns->num_syns, n;
-
-    double *isyn = (double*) malloc(num_syns * sizeof(double));
-    
-    // copy vpost to isyn
-    for (n=0; n<num_syns; n++){
-        isyn[n] = *(syns->ptr_vpost[n]);
-    }
-
-    // Isyn = weight .* r .* (vpost - veq)
-    cblas_daxpy(num_syns, -1, syns->veq, 1, isyn, 1);
-    vdMul(num_syns, syns->r, isyn, isyn);
-    vdMul(num_syns, syns->weight, isyn, isyn);
-
-    // add current to each post-synaptic neuron
-    for (n=0; n<num_syns; n++){
-        *(syns->ptr_ipost[n]) -= isyn[n];
-    }
-
-    free(isyn);
-}
-
-
-void solve_deq_using_rk4(void (*f) (double*, double*, void*, void*), int N, double *dx, double *x, void *arg1, void *arg2)
-{
-    double *dx2, *dx3, *dx4, *xnew;
-
-    int sz = sizeof(double) * N;
-
-    // init array, sz is the length of the array
-    xnew = (double*) malloc(sz);
-    dx2  = (double*) malloc(sz);
-    dx3  = (double*) malloc(sz);
-    dx4  = (double*) malloc(sz);
-
-    // solve equation using RK4 mehtod
-    f(dx, x, arg1, arg2); // 1st step, dx = dx1
-
-    memcpy(xnew, x, sz);   // 2nd step
-    cblas_daxpy(N, 0.5, dx, 1, xnew, 1);
-    f(dx2, x, arg1, arg2);
-
-    memcpy(xnew, x, sz);   // 3rd step
-    cblas_daxpy(N, 0.5, dx2, 1, xnew, 1);
-    f(dx3, x, arg1, arg2);
-
-    memcpy(xnew, x, sz);   // 4th step
-    cblas_daxpy(N, 1., dx3, 1, xnew, 1);
-    f(dx4, x, arg1, arg2);
-
-    // add k1/6 + k2/3 +  k3/3 + k4/6
-    cblas_daxpy(N, 1/3, dx2, 1/6, dx, 1);
-    cblas_daxpy(N, 1/3, dx3, 1,   dx, 1);
-    cblas_daxpy(N, 1/6, dx3, 1,   dx, 1);
-
-    // end objs
-    free(xnew);
-    free(dx2); free(dx3); free(dx4);
-}
-
-
-void f_dv(double *dv, double *v, void *arg_cells, void *arg_null)
-{
-    neuron_t *cells = (neuron_t*) arg_cells;
+    /*** dv/dt = 0.04*v^2 + 5*v - u + I + 140 ***/
+    neuron_t *cells = (neuron_t*) arg_neuron;
     int N = cells->num_cells;
 
-    vdMul(N, v, v, dv);
-    cblas_dscal(N, 0.04, dv, 1);
-    cblas_daxpy(N, 5., v, 1, dv, 1);
-    cblas_daxpy(N, -1., cells->u, 1, dv, 1);
-    cblas_daxpy(N, 1., cells->ic, 1, dv, 1);
+    double *dv = (double*) malloc_c(sz_d * N);
+    
+    vdPow(N, v, 2, dv);
+    cblas_daxpby(N, 5*_dt, v, 1, 0.04*_dt, dv, 1);
+    cblas_daxpy(N, -_dt, cells->u, 1, dv, 1);
+    cblas_daxpy(N, _dt, cells->ic, 1, dv, 1);
 
-    for (int n=0; n<cells->num_cells; n++){ dv[n] += 140; }
+    double c=140*_dt;
+    for (int n=0; n<N; n++){
+        dv[n] += c;
+    }
 
-    cblas_dscal(N, _dt, dv, 1);
+    return dv;
 }
 
 
-void f_du(double *du, double *u, void *arg_cells, void *arg_null)
+double *f_du(double *u, void *arg_neuron, void *arg_null)
 {
-    neuron_t *cells = (neuron_t*) arg_cells;
+    /*** du/dt = a*(b*v-u) ***/
+    neuron_t *cells = (neuron_t*) arg_neuron;
     int N = cells->num_cells;
-    
-    vdMul(N, cells->b, cells->v, du); // du = b.*v
-    cblas_daxpy(N, -1., u, 1, du, 1); // du = (b.*v - u)
-    vdMul(N, cells->a, du, du);       // du = a.*(b.*v - u)
+
+    double *du = (double*) malloc_c(sz_d * N);
+
+    vdMul(N, cells->b, cells->v, du);
+    cblas_daxpy(N, -1, u, 1, du, 1);
+    vdMul(N, cells->a, du, du);
     cblas_dscal(N, _dt, du, 1);
+
+    return du;
 }
 
 
-void f_dr_delay(double *dr, double *r, void *arg_syns, void *arg_syn_act)
+double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 {
-    syn_t *syns = (syn_t*) arg_syns;
-    double *syn_act = (double*) arg_syn_act;
+    /*** dr/dt = (-r + R\delta) / tau ***/
+    syn_t *syns = (syn_t*) arg_syn;
+    double *dr = (double*) malloc_c(sz_d * syns->num_pres);
 
-    int num_syns = syns->num_syns;
+    memcpy(dr, r, sz_d*syns->num_pres);
+    cblas_dscal(syns->num_pres, -_dt, dr, 1);
 
-    memcpy(dr, r, num_syns * sizeof(double));
-    // cblas_dcopy(num_syns, r, 1, dr, 1);
-    cblas_dscal(num_syns, -1., dr, 1);
-    cblas_daxpy(num_syns, syns->R/_dt, syn_act, 1, dr, 1);
-    vdMul(num_syns, dr, syns->inv_tau, dr);
-    cblas_dscal(num_syns, _dt, dr, 1);
+    int *ptr_id = arg_fired;
+    while (*ptr_id > 0){
+        dr[*ptr_id++] += _R; // _R/_dt *
+    }
+
+    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
+
+    return dr;
 }
 
 
-void f_dr_no_delay(double *dr, double *r, void *arg_syns, void *arg_id_fire)
+double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_fired)
 {
-    syn_t *syns = (syn_t*) arg_syns;
-    int *id_fire = (int*) arg_id_fire;
-    int i, id_syn, *m = id_fire, num_syns=syns->num_syns;
-
-    // cblas_dcopy(num_syns, r, 1, dr, 1);
-    // memset(dr, 0, sizeof(double) * num_syns);
-    memcpy(dr, r, num_syns * sizeof(double));
-    cblas_dscal(num_syns, -1., dr, 1);
-
-    while (*m != -1){
-        for (i=0; i<syns->n_pre2syn[*m]; i++){
-            id_syn = syns->id_pre2syn[*m][i];
-            dr[id_syn] += syns->R/_dt;
-        }
-        m++;
-    }
-
-    vdMul(num_syns, syns->inv_tau, dr, dr);
-    cblas_dscal(num_syns, _dt, dr, 1);
+    /*** TODO: fill the function***/
+    syn_t *syns = (syn_t*) arg_syn;
+    int *id_fired_neuron = (int *) arg_fired;
 }
 
 
-void f_dr_bck(double *dr, double *r, void *arg_syns, void *arg_syn_act)
+double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2)
 {
-    bcksyn_t *bck_syns = (bcksyn_t*) arg_syns;
-    double *syn_act = (double*) arg_syn_act;
-    int N = bck_syns->num_bck;
+    // solve differential equation usign Runge-Kutta 4th order method
 
-    // check calculateion
+    double *dx = f(x, arg1, arg2);
 
-    memcpy(dr, r, N*sizeof(double));
-    cblas_dscal(N, -1., dr, 1);
-    cblas_daxpy(N, bck_syns->R/_dt, syn_act, 1, dr, 1);
-    vdMul(N, bck_syns->inv_tau, dr, dr);
-    cblas_dscal(N, _dt, dr, 1);
+    double *xtmp = (double*) malloc_c(sz_d * N);
+    vdAdd(N, x, dx, xtmp);
+    double *dx2 = f(xtmp, arg1, arg2);
+
+    vdAdd(N, x, dx2, xtmp);
+    double *dx3 = f(xtmp, arg1, arg2);
+
+    vdAdd(N, x, dx3, xtmp);
+    double *dx4 = f(xtmp, arg1, arg2);
+    free_c(xtmp);
+
+    cblas_daxpby(N, 1/3, dx2, 1, 1/6, dx, 1);
+    cblas_daxpy(N,  1/3, dx3, 1, dx, 1);
+    cblas_daxpy(N,  1/3, dx4, 1, dx, 1);
+
+    free_c(dx2);
+    free_c(dx3);
+    free_c(dx4);
+
+    return dx;
 }
 
 
-void map_pre2syn(syn_t *syns, ntk_t *ntk)
+void get_avg(int num_x, int **ptr_x)
 {
-    int id_syn=0, n, i;
-
-    if (syns->is_delay_on == 1){
-        for (n=0; n<ntk->num_pre; n++){
-            for (i=0; i<ntk->num_edges[n]; i++){
-                syns->id_pre[id_syn++] = n;
-            }   
-        }
-    } else { // delay == 0
-        memcpy(syns->n_pre2syn, ntk->num_edges, syns->num_pre * sizeof(int));
-
-        for (n=0; n<ntk->num_pre; n++){
-            (syns->id_pre2syn)[n] = (int*) malloc(ntk->num_edges[n] * sizeof(int));
-            for (i=0; i<ntk->num_edges[n]; i++){
-                syns->id_pre2syn[n][i] = id_syn++;
-            }
-        }   
-    }
-}
-
-// get Kuramoto order parameters
-void get_Kuramoto_order_params(int len, neuron_t *cells, double *rK, double *psiK)
-{   
-    int n, i, num_cells=cells->num_cells;
-    double *phase, *sum_real, *sum_imag, *ptr_sr, *ptr_si, *ptr_p;
-
-    phase    = (double*) malloc(sizeof(double) * len);
-    sum_real = (double*) malloc(sizeof(double) * len);
-    sum_imag = (double*) malloc(sizeof(double) * len);
-
-    for (n=0; n<num_cells; n++){
-        get_spike_phase(cells->num_spk[n], len, cells->t_spk[n], phase);
-
-        ptr_sr = sum_real;
-        ptr_si = sum_imag;
-        ptr_p  = phase;
-
-        for (i=0; i<len; i++){
-            *ptr_sr++ += cos(*ptr_p);
-            *ptr_si++ += sin(*ptr_p++);
-        }
-    }
-
-    cblas_dscal(len, 1./num_cells, sum_real, 1);
-    cblas_dscal(len, 1./num_cells, sum_imag, 1);
-
-    // get Kuramoto order parameter
-    ptr_sr = sum_real;
-    ptr_si = sum_imag;
-    ptr_p  = psiK;
-    for (i=0; i<len; i++){
-        *ptr_p++ = atan2(*ptr_si++, *ptr_sr++); // +- phi
-    }
-
-    cblas_dnrm2(len, sum_real, 1);
-
-    ptr_sr = sum_real;
-    ptr_si = sum_imag;
-    ptr_p  = rK;
-    for (i=0; i<len; i++){
-        *ptr_p++ = sqrt(pow(*ptr_sr++, 2) + pow(*ptr_si++, 2));
-    }
-
-    free(phase);
-    free(sum_real);
-    free(sum_imag);
-}
-
-
-void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase)
-{
-    int i, *n0, *n1, tmp=0;
-
-    memset(phase, 0, sizeof(double) * nmax);
-
-    if (n_spk == 0){
-        return;
-    }
-
-    n0 = &tmp;
-    n1 = nsteps;
-    n_spk--;
-
-    for (i=0; i<nmax; i++){
-        if (i == *n1) {
-            if (n_spk == 0){
-                return;
-            }
-            n0 = n1;
-            n1++;
-        }
-        phase[i] = 2*PI * (i - *n0)/(*n1 - *n0);
-    }        
-}
-
-
-void append_spike(int nstep, int *id, int **t_spk)
-{
-    (*t_spk)[*id] = nstep;
-    (*id)++;
-    if (((*id) % _block_size == 0) && (*id > 0)){
-        *t_spk = (int*) realloc(*t_spk, (*id + _block_size) * sizeof(double));
-    }
-    (*t_spk)[*id] = -1;
-}
-
-
-double get_avg(int num_x, double *x)
-{   
-    // get average of the x
-    double x_avg = 0;
+    double x = 0;
     for (int n=0; n<num_x; n++){
-        x_avg += x[n];
+        x += **ptr_x++;
     }
-    x_avg /= num_x;
-    
-    // x_avg /= num_x;
-    return x_avg;
+    return x/num_x;
 }
 
 
-void reset_spike(neuron_t *cells)
+void append_spike(int nstep, int *num_spk, int **t_spk)
 {
-    for (int n=0; n<cells->num_cells; n++){
-        for (int i=0; i<cells->num_spk[n]; i++){
-            cells->t_spk[n][i] = 0;
-        }
-        cells->num_spk[n] = 0;
+    (*t_spk)[*num_spk] = nstep;
+    (*num_spk)++;
+    if (((*num_spk) % _block_size == 0) && (*num_spk > 0)){
+        *t_spk = (int*) realloc(*t_spk, (*num_spk + _block_size) * sz_d);
     }
+    (*t_spk)[*num_spk] = -1;
 }
 
 
-void save_env(char fname[100], int num_cells, int *cell_types, int num_syns, int *id_presyns, double tmax)
+double *read_ptr(int num_x, double **ptr_x)
 {
-    FILE *fid = fopen(fname, "w");
-    fprintf(fid, "%d, %d, %f, %f\n", num_cells, num_syns, tmax, _dt);
-    // save cell types
-    int n;
-    fprintf(fid, "%d", cell_types[0]);
-    for (n=1; n<num_cells; n++){
-        fprintf(fid, ",%d", cell_types[n]);
-    }
-    fprintf(fid, "\n");
+    double *x = (double*) malloc_c(sz_d * num_x);
 
-    // save pre neuron ids
-    fprintf(fid, "%d", id_presyns[0]);
-    for (n=1; n<num_syns; n++){
-        fprintf(fid, ",%d", id_presyns[n]);
+    for (int n=0; n<num_x; n++){
+        x[n] = **ptr_x++;
     }
-    fprintf(fid, "\n");
 
-    fclose(fid);
+    return x;
 }
 
 
-void write_dat(FILE *fid, int N, double *x)
+void free_neurons(neuron_t *cells)
 {
-    fwrite(x, sizeof(double), N, fid);
-}
-
-
-void write_cell_fire(FILE *fid, int *id_fire)
-{
-    int *id = id_fire;
-    while (*id != -1){
-        fprintf(fid, "%d,", *(id++));
-    }
-    fprintf(fid, "\n");
-}
-
-
-void free_cells(neuron_t *cells)
-{
-    free(cells->v);
-    free(cells->u);
-    free(cells->ic);
-    free(cells->a);
-    free(cells->b);
-    free(cells->c);
-    free(cells->d);
+    free_c(cells->v);
+    free_c(cells->u);
+    free_c(cells->ic);
+    free_c(cells->a);
+    free_c(cells->b);
+    free_c(cells->c);
+    free_c(cells->d);
     free(cells->num_spk);
-    free(cells->id_fire);
-
+    free(cells->id_fired_neuron);
     for (int n=0; n<cells->num_cells; n++){
-        free(cells->t_spk[n]);
+        free(cells->t_fired[n]);
     }
-    free(cells->t_spk);
+    free(cells->t_fired);
 }
 
 
 void free_syns(syn_t *syns)
 {
-    int n;
+    free_c(syns->r);
+    free_c(syns->veq);
+    free_c(syns->weight);
+    free_c(syns->inv_tau);
 
-    free(syns->r);
-    free(syns->weight);
-    free(syns->veq);
-    free(syns->inv_tau);
+    free(syns->ptr_r);
     free(syns->ptr_vpost);
     free(syns->ptr_ipost);
-    free(syns->id_pre_neuron);
-    free(syns->id_post_neuron);
-
-    if (syns->is_delay_on == 1){
+    
+    if (syns->type == BACKGROUND){
+        free(syns->p_fire);
+    } else if (syns->type == DELAY) {
         free(syns->delay);
-        free(syns->id_pre);
-        free(syns->id_t_spk);
-    } else {
-        free(syns->n_pre2syn);
-        for (n=0; n<syns->num_pre; n++){
-            free(syns->id_pre2syn[n]);
-        }
-        free(syns->id_pre2syn);
     }
-}
-
-
-void free_bcksyns(bcksyn_t *bck_syns)
-{
-    free(bck_syns->r);
-    free(bck_syns->weight);
-    free(bck_syns->inv_tau);
-    free(bck_syns->fspk);
-    free(bck_syns->syn_act);
 }

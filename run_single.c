@@ -69,6 +69,7 @@ int main(int argc, char **argv)
     bcksyn_t bck_syns;
 
     gRatio = 0.01;
+    _dt = 0.01;
     init_simulation(&info, &cells, &syns, &bck_syns);
     
     // open writer
