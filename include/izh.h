@@ -3,9 +3,8 @@
 
 #include "ntk.h"
 
-#define _block_size;
 extern double _dt;
-
+extern double _R;
 
 typedef enum _SYN_TYPE {
     BACKGROUND = 0,
@@ -53,6 +52,7 @@ typedef struct _syn_t
 
 } syn_t;
 
+void init_random_stream(long int seed);
 void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int *cell_types);
 void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double cell_veq[], double cell_tau[], double *vpost, double *ipost);
 
@@ -64,18 +64,19 @@ void update_neurons(neuron_t *cells, int nstep, int *id_fired_neuron);
 void update_syns_no_delay(syn_t *syns, int *id_fired_neuron);
 void update_syns_delay(syn_t *syns); // need to udpate
 
-int *gen_bck_spike(syn_t *bck_syns);
+void gen_bck_spike(syn_t *bck_syns, int *id_fired_bck);
 
 double *f_dv(double *v, void *arg_neuron, void *arg_null);
 double *f_du(double *u, void *arg_neuron, void *arg_null);
 double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired);
-double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_fired);
+// double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_fired);
 double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2);
 void append_spike(int nstep, int *num_spk, int **t_spk);
-double *read_ptr(int num_x, double **ptr_x);
-void get_avg(int num_x, int **ptr_x);
+void read_ptr(int num_x, double *x, double **ptr_x);
+double get_avg(int num_x, int **ptr_x);
 
 void free_neurons(neuron_t *cells);
 void free_syns(syn_t *syns);
+void free_rand_stream();
 
 #endif

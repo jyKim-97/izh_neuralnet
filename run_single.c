@@ -7,8 +7,9 @@
 
 #include "parson.h"
 #include "izh.h"
-#include "mt64.h"
 #include "utils.h"
+#include "writer.h"
+
 
 typedef struct _simulinfo_t {
 
@@ -35,18 +36,20 @@ typedef struct _simulinfo_t {
 } simulinfo_t;
 
 
-void init_simulation(simulinfo_t *info, neuron_t *cells, syn_t *syns, bcksyn_t *bck_syns);
-void gen_cell_type(int num_cells, double cell_ratio[], int *cell_types);
+extern double _R;
+extern double _dt;
+extern double default_cell_params[4][4];
+extern double default_syn_veq[4];
+extern double default_syn_tau[4];
+
+
 void read_single_info(char fjson[100], simulinfo_t *info);
+void init_simulation(simulinfo_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
+void run_simulation(char fjson[100]);
+void gen_cell_type(int num_cells, double cell_ratio[], int *cell_types);
 void alloc1d(JSON_Array *arr, double x[_n_types]);
 void alloc2d(JSON_Array *arr, double x[_n_types][_n_types]);
-void open_dat_with_tag(FILE **fid, char tag[], char typename[]);
-void open_file_with_tag(FILE **fid, char tag[], char typename[]);
-void square_current(int n, double *ic, int num_cells, int n0, int n1, double amp);
 
-extern double gRatio; // from Izh.c
-extern double CELL_TAU[_n_types];
-extern double _dt;
 
 int main(int argc, char **argv)
 {
@@ -58,121 +61,80 @@ int main(int argc, char **argv)
         strcpy(fname, argv[1]);
     }
 
-    // read argument
-    simulinfo_t info;
-    // read simulinfo params
-    read_single_info(fname, &info);
+    run_simulation(fname);
+    printf("\nDone\n");
 
-    // open file writer
+    return 0;
+}
+
+
+void run_simulation(char fjson[100])
+{
+
+    // _dt = 0.01;
+    _R = 0.001;
+
+    simulinfo_t info;
+    read_single_info(fjson, &info);
+
     neuron_t cells;
     syn_t syns;
-    bcksyn_t bck_syns;
+    syn_t bck_syns;
 
-    gRatio = 0.01;
-    _dt = 0.01;
     init_simulation(&info, &cells, &syns, &bck_syns);
-    
-    // open writer
-    FILE *fv, *fu, *fi, *fr, *ft; // ft is the spike times
-    open_dat_with_tag(&fv, info.tag, "v");
-    open_dat_with_tag(&fu, info.tag, "u");
-    open_dat_with_tag(&fi, info.tag, "i");
-    open_dat_with_tag(&fr, info.tag, "r");
-    open_file_with_tag(&ft, info.tag, "t");
-
-    // write simulation info
-    char fenv[100];
-    sprintf(fenv, "%s_env.txt", info.tag);
-    save_env(fenv, cells.num_cells, info.cell_types,
-            syns.num_syns, syns.id_pre_neuron, info.tmax);
+    printf("write to %s\n", info.tag);
 
     // run simulation
+    int max_step = info.tmax/_dt;
+    int ninp[2] = {info.sq_inp_t[0]/_dt, info.sq_inp_t[1]/_dt};
+    double amp = info.sq_amp;
+    int num_exc = info.num_cells * info.cell_ratio[0];
+
+    int *id_fired_neuron = (int*) malloc(sizeof(int) * (info.num_cells+1));
+    int *id_fired_bck = (int*) malloc(sizeof(int) * (info.num_bck+1));
+    id_fired_neuron[0] = -1;
+    id_fired_bck[0] = -1;
+
+    writer_t fp_obj;
+    init_writer(&fp_obj, info.tag, V_ONLY | U_ONLY | I_ONLY | SPK_ONLY);
+
     progbar_t bar;
-    int max_step = info.tmax / _dt;
-
-    int num_exc = 0;
-    for (int i=0; i<info.num_cells; i++){
-        if (info.cell_types[i] != 1){ num_exc++; }
-    }
-    free(info.cell_types);
-
-    square_current(-1, NULL, num_exc, info.sq_inp_t[0]/_dt, info.sq_inp_t[1]/_dt, info.sq_amp);
-    printf("Start single network simulation, Network Size = %d, tmax = %.1f ms, dt = %.3f ms, %d itr\n",
-                info.num_cells, info.tmax, _dt, max_step);
     init_progressbar(&bar, max_step);
 
-    write_dat(fv, cells.num_cells, cells.v);
-    write_dat(fu, cells.num_cells, cells.u);
-    write_dat(fi, cells.num_cells, cells.ic);
-    write_dat(fr, syns.num_syns, syns.r);
-    write_cell_fire(ft, cells.id_fire);
-    
     for (int n=0; n<max_step; n++){
-        // square input current
-        square_current(n, cells.ic, 0, 0, 0, 0);
-        // update all
-        update_no_delay(n, &cells, &syns, &bck_syns);
-        
-        write_dat(fv, cells.num_cells, cells.v);
-        write_dat(fu, cells.num_cells, cells.u);
-        write_dat(fi, cells.num_cells, cells.ic);
-        write_dat(fr, syns.num_syns, syns.r);
-        write_cell_fire(ft, cells.id_fire);
 
-        memset(cells.ic, 0, cells.num_cells*sizeof(double));
+        memset(cells.ic, 0, sizeof(double)*info.num_cells);
+        if ((n>ninp[0]) && (n<ninp[1])){
+            for (int i=0; i<num_exc; i++){
+                cells.ic[i] = amp;
+            }
+        }
 
+        // update background
+        gen_bck_spike(&bck_syns, id_fired_bck);
+        update_syns_no_delay(&bck_syns, id_fired_bck);
+        add_isyn_bck(&bck_syns);
+
+        // update synapse
+        update_syns_no_delay(&syns, id_fired_neuron);
+        add_isyn(&syns);
+
+        // update neuron
+        update_neurons(&cells, n, id_fired_neuron);
+
+        write_data(fp_obj.fv, cells.num_cells, cells.v);
+        write_data(fp_obj.fu, cells.num_cells, cells.u);
+        write_data(fp_obj.fi, cells.num_cells, cells.ic);
+        write_spike(fp_obj.ft_spk, n, id_fired_neuron);
         progressbar(&bar, n);
     }
-    fprintf(stderr, "\n");
-    
-    free_cells(&cells);
+
+    free(id_fired_neuron);
+    free(id_fired_bck);
+    free_neurons(&cells);
     free_syns(&syns);
-    free_bcksyns(&bck_syns);
-
-    fclose(fv);
-    fclose(fu);
-    fclose(fi);
-    fclose(fr);
-    fclose(ft);
-}
-
-
-void square_current(int n, double *ic, int num_cells, int n0, int n1, double amp)
-{
-    static int n_inp[2] = {0};
-    static double amp_inp;
-    static int N = 0;
-
-    if (n == -1){
-        n_inp[0] = n0;
-        n_inp[1] = n1;
-        amp_inp = amp;
-        N = num_cells;
-
-        return;
-    }
-
-    if ((n > n_inp[0]) && (n < n_inp[1])){
-        for (int i=0; i<N; i++){
-            ic[i] = amp_inp;
-        }
-    }
-}
-
-
-void open_file_with_tag(FILE **fid, char tag[], char typename[])
-{
-    char fname[100];
-    sprintf(fname, "%s_%s.txt", tag, typename);
-    *fid = fopen(fname, "w");
-}
-
-
-void open_dat_with_tag(FILE **fid, char tag[], char typename[])
-{
-    char fname[100];
-    sprintf(fname, "%s_%s.dat", tag, typename);
-    *fid = fopen(fname, "wb");
+    free_syns(&bck_syns);
+    free_rand_stream();
 }
 
 
@@ -183,6 +145,7 @@ void read_single_info(char fjson[100], simulinfo_t *info)
     JSON_Array *arr;
 
     info->num_cells = json_object_get_number(root_obj, "num_cells");
+    _dt = json_object_get_number(root_obj, "dt");
 
     arr = json_object_get_array(root_obj, "cell_ratio");
     alloc1d(arr, info->cell_ratio);
@@ -209,6 +172,8 @@ void read_single_info(char fjson[100], simulinfo_t *info)
     alloc1d(arr, info->sq_inp_t);
 
     sprintf(info->tag, "%s", json_object_get_string(root_obj, "tag"));
+    
+    json_value_free(root_value);
 }
 
 
@@ -234,36 +199,38 @@ void alloc2d(JSON_Array *arr, double x[_n_types][_n_types])
 }
 
 
-void init_simulation(simulinfo_t *info, neuron_t *cells, syn_t *syns, bcksyn_t *bck_syns)
+void init_simulation(simulinfo_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns)
 {
-    ntk_t ntk_syns, ntk_bck_syns;
-    
-    int is_delay_on = 0;
-    double *delay = NULL;
 
-    info->cell_types = (int*) malloc(info->num_cells * sizeof(int));
-    gen_cell_type(info->num_cells, info->cell_ratio, info->cell_types);
+    int *cell_types = (int*) malloc(sizeof(int) * info->num_cells);
+    gen_cell_type(info->num_cells, info->cell_ratio, cell_types);
 
-    // init cell structure
-    init_cell_vars(cells, info->num_cells, info->cell_types);
+    init_cell_vars(cells, info->num_cells, default_cell_params, cell_types);
 
-    // init syn structures
-    init_bi_ntk(info->num_cells, info->num_cells, &ntk_syns); // synaptic network
-    gen_bi_random_ntk_with_type(info->cell_types, info->cell_types, info->p_syn, info->g_syn, &ntk_syns);
-    init_syn_vars(syns, info->num_cells, is_delay_on, delay, cells->v, cells->ic, &ntk_syns);
-    free_bi_ntk(&ntk_syns);
+    ntk_t ntk_syn;
+    init_bi_ntk(info->num_cells, info->num_cells, &ntk_syn);
+    gen_bi_random_ntk_with_type(cell_types, cell_types, info->p_syn, info->g_syn, &ntk_syn);
+    init_syn_vars(syns, info->num_cells, NO_DELAY, &ntk_syn, default_syn_veq,
+                    default_syn_tau, cells->v, cells->ic);
+    free_bi_ntk(&ntk_syn);
 
+    ntk_t ntk_bck_syn;
     int *bck_types = (int*) calloc(info->num_bck, sizeof(int));
-    init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck_syns); // background synapse
-    gen_bi_random_ntk_with_type(bck_types, info->cell_types, &(info->p_bck), &(info->g_bck), &ntk_bck_syns);
-    init_bcksyn_vars(bck_syns, info->num_cells, info->num_bck, info->tau_bck, &ntk_bck_syns);
-    free_bi_ntk(&ntk_bck_syns);
+    double bck_veq[] = {0, 0, 0, 0};
+    double bck_tau[] = {5, 5, 5, 5};
 
+    init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck_syn);
+    gen_bi_random_ntk_with_type(bck_types, cell_types, &info->p_bck, &info->g_bck, &ntk_bck_syn);
+    init_syn_vars(bck_syns, info->num_bck, BACKGROUND, &ntk_bck_syn, bck_veq, bck_tau,
+                    cells->v, cells->ic);
+    
     // set firing probability of the background synapse
     for (int n=0; n<info->num_bck; n++){
-        bck_syns->fspk[n] = info->p_fire_bck;
+        bck_syns->p_fire[n] = info->p_fire_bck;
     }
     
+    free_bi_ntk(&ntk_bck_syn);
+    free(cell_types);
     free(bck_types);
 }
 
