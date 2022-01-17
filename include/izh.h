@@ -75,10 +75,10 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired);
 double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2);
 void append_spike(int nstep, int *num_spk, int **t_spk);
 void read_ptr(int num_x, double *x, double **ptr_x);
-double get_avg(int num_x, int **ptr_x);
+double get_avg(int num_x, double *x, int *is_target);
 void reset_spike(neuron_t *cells);
 
-void get_Kuramoto_order_params(int len, neuron_t *cells, double *rK, double *psiK);
+void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double *rK, double *psiK);
 void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase);
 
 void free_neurons(neuron_t *cells);

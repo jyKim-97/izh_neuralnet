@@ -428,49 +428,46 @@ double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double 
 }
 
 
-void get_Kuramoto_order_params(int len, neuron_t *cells, double *rK, double *psiK)
+void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double *rK, double *psiK)
 {   
-    int n, i, num_cells=cells->num_cells;
-    double *phase, *sum_real, *sum_imag, *ptr_sr, *ptr_si, *ptr_p;
+    int num_cells=cells->num_cells;
 
-    phase    = (double*) malloc(sz_d * len);
-    sum_real = (double*) malloc(sz_d * len);
-    sum_imag = (double*) malloc(sz_d * len);
+    double *sum_real = (double*) malloc(sz_d * len);
+    double *sum_imag = (double*) malloc(sz_d * len);
+    int N = 0;
 
-    for (n=0; n<num_cells; n++){
+    for (int n=0; n<num_cells; n++){
+        if ((is_target != NULL) && (is_target[n] == 0)){
+            continue;
+        }
+        N++;
+
+        double *phase = (double*) malloc(sz_d * len);
         get_spike_phase(cells->num_spk[n], len, cells->t_fired[n], phase);
 
-        ptr_sr = sum_real;
-        ptr_si = sum_imag;
-        ptr_p  = phase;
+        double *tmp_real = (double*) malloc(sz_d * len);
+        double *tmp_imag = (double*) malloc(sz_d * len);
 
-        for (i=0; i<len; i++){
-            *ptr_sr++ += cos(*ptr_p);
-            *ptr_si++ += sin(*ptr_p++);
-        }
+        vdCos(len, phase, tmp_real);
+        vdSin(len, phase, tmp_imag);
+
+        vdAdd(len, tmp_real, sum_real, sum_real);
+        vdAdd(len, tmp_imag, sum_imag, sum_imag);
+        
+        free(phase);
+        free(tmp_real);
+        free(tmp_imag);
     }
 
-    cblas_dscal(len, 1./num_cells, sum_real, 1);
-    cblas_dscal(len, 1./num_cells, sum_imag, 1);
+    cblas_dscal(len, 1./N, sum_real, 1);
+    cblas_dscal(len, 1./N, sum_imag, 1);
 
     // get Kuramoto order parameter
-    ptr_sr = sum_real;
-    ptr_si = sum_imag;
-    ptr_p  = psiK;
-    for (i=0; i<len; i++){
-        *ptr_p++ = atan2(*ptr_si++, *ptr_sr++); // +- phi
+    for (int i=0; i<len; i++){
+        psiK[i] = atan2(sum_real[i], sum_imag[i]); // +- phi
+        rK[i] = sqrt(sum_real[i]*sum_real[i] + sum_imag[i]*sum_imag[i]);
     }
 
-    cblas_dnrm2(len, sum_real, 1);
-
-    ptr_sr = sum_real;
-    ptr_si = sum_imag;
-    ptr_p  = rK;
-    for (i=0; i<len; i++){
-        *ptr_p++ = sqrt(pow(*ptr_sr++, 2) + pow(*ptr_si++, 2));
-    }
-
-    free(phase);
     free(sum_real);
     free(sum_imag);
 }
@@ -502,15 +499,20 @@ void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase)
     }
 }
 
-
-double get_avg(int num_x, int **ptr_x)
+double get_avg(int num_x, double *x, int *is_target)
 {
-    double x = 0;
+    double x_avg = 0;
+
+    int N = 0;
     for (int n=0; n<num_x; n++){
-        x += **ptr_x++;
+        if ((is_target != NULL) && (is_target[n] == 0)){
+            continue;
+        }
+        x_avg += x[n];
+        N++;
     }
-    x /= num_x;
-    return x;
+    x_avg /= N;
+    return x_avg;
 }
 
 

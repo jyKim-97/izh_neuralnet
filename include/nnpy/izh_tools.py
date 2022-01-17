@@ -6,12 +6,12 @@ import matplotlib.pyplot as plt
 class IzhReader:
     def __init__(self, tag):
         self.tag = tag
-        self._read_info()
         self.vs = None
         self.us = None
         self.rs = None
         self.ics = None
         self.t_spks = None
+        self._read_info()
         
     def _read_info(self):
         with open(f'{self.tag}_env.txt', 'r') as fid:
@@ -22,6 +22,7 @@ class IzhReader:
             self.cell_types = [int(i) for i in fid.readline().split(",")[:-1]]
             self.file_id = fid.readline()
         self.ts = np.arange(0, self.tmax, self.dt) + self.dt
+        self.read_file()
         
     def read_file(self):
         var_names = ["vs", "us", "ics"]
