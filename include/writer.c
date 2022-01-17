@@ -13,26 +13,69 @@ void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
     if (mod & 1){
         sprintf(fname, "%s_fv.dat", tag);
         fid_obj->fv = open_file(fname, "wb");
-        // fid_obj->fv = fopen(fname, "wb");
-        // check_open(fid_obj->fv, "v");
     }   
     if (mod & 2){
         sprintf(fname, "%s_fu.dat", tag);
         fid_obj->fu = open_file(fname, "wb");
-        // fid_obj->fu = fopen(fname, "wb");
-        // check_open(fid_obj->fu, "u");
     }
     if (mod & 4){
         sprintf(fname, "%s_fi.dat", tag);
         fid_obj->fi = open_file(fname, "wb");
-        // fid_obj->fi = fopen(fname, "wb");
-        // check_open(fid_obj->fi, "ic");
     }
     if (mod & 8){
         sprintf(fname, "%s_ft_spk.txt", tag);
         fid_obj->ft_spk = open_file(fname, "w");
-        // fid_obj->ft_spk = fopen(fname, "w");
-        // check_open(fid_obj->ft_spk, "spike");
+    }
+}
+
+
+void write(writer_t *fid_obj, int nstep, neuron_t *cells)
+{
+    int num_cells = cells->num_cells;
+    if (fid_obj->mod & 1){
+        write_data(fid_obj->fv, num_cells, cells->v);
+    }
+    if (fid_obj->mod & 2){
+        write_data(fid_obj->fu, num_cells, cells->u);
+    }
+    if (fid_obj->mod & 4){
+        write_data(fid_obj->fi, num_cells, cells->ic);
+    }
+    if (fid_obj->mod & 8){
+        write_spike(fid_obj->ft_spk, nstep, cells->id_fired);
+    }
+}
+
+
+void write_env(writer_t *fid_obj, int num_cells, int num_bck, double tmax, double dt, int *cell_types)
+{
+    char fname[100];
+    sprintf(fname, "%s_env.txt", fid_obj->tag);
+    FILE *fp = fopen(fname, "w");
+
+    fprintf(fp, "num_cells=%d\n", num_cells);
+    fprintf(fp, "num_bck=%d\n", num_bck);
+    fprintf(fp, "tmax=%f\n", tmax);
+    fprintf(fp, "dt=%f\n", dt);
+    for (int n=0; n<num_cells; n++){
+        fprintf(fp, "%d,", cell_types[n]);
+    }
+    // file list
+    fprintf(fp, "\n");
+    for (int i=1; i<16; i*=2){
+        fprintf(fp, "%d", is_opened(fid_obj, i));
+    }
+
+    fclose(fp);
+}
+
+
+int is_opened(writer_t *fid_obj, int mod)
+{
+    if (fid_obj->mod & mod){
+        return 1;
+    } else {
+        return 0;
     }
 }
 

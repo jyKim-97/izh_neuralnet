@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -O2 -std=c11 -g 
 # LDFLAGS = -lm -fopenmp -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread
 # LIB = -L${MKLROOT}/lib/intel64 
-LDFLAGS = -lizh_neuralnet -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm
+LDFLAGS = -lizh_neuralnet -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -fopenmp
 LIB = -L${MKLROOT}/lib/intel64 -L${IZHROOT}/lib
 INC = -I${MKLROOT}/include -I${IZHROOT}/include
 

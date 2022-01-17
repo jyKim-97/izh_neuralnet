@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <omp.h>
 
 #include <mkl.h>
 #include <mkl_vsl.h>
@@ -34,6 +35,11 @@
 VSLStreamStatePtr rand_stream;
 
 
+// TODO: TWO cell interaction 확인해봐야될듯? inh가 잘 안들어가는 느낌
+// TODO: 특정 initializing 함수들이 call됬는지 확인 변수 있으면 좋을듯
+// TODO: compile bash도 따로 하나 general하게 만들면 좋을듯
+
+
 double _dt = 0.005; // simulation time step
 double _R  = 1;  // 
 const double default_cell_params[4][4]= {
@@ -41,7 +47,7 @@ const double default_cell_params[4][4]= {
             {0.1, 0.2, -65, 2},   // FS
             {0.02, 0.2, -55, 4},    // IB
             {0.02, 0.2, -50, 2}};   // CH
-const double default_syn_veq[4] = {0, -70, 0, 0};
+const double default_syn_veq[4] = {0, -80, 0, 0};
 const double default_syn_tau[4] = {5, 6, 5, 5};
 
 
@@ -49,6 +55,7 @@ void init_random_stream(long int seed)
 {
     vslNewStream(&rand_stream, VSL_BRNG_MT19937, seed);
     init_genrand64(seed);
+    // omp_set_num_threads(4);s
 }
 
 void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int *cell_types)
@@ -78,12 +85,12 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int
     // init spike parameters
     cells->num_spk = (int*) calloc(num_cells, sz_i);
     cells->t_fired = (int**) malloc(sizeof(int*) * num_cells);
-    cells->id_fired_neuron = (int*) malloc(sz_i * num_cells);
+    cells->id_fired = (int*) malloc(sz_i * num_cells);
 
     for (int n=0; n<num_cells; n++){
         cells->t_fired[n] = (int*) malloc(sz_i * _block_size);
         cells->t_fired[n][0] = -1;
-        cells->id_fired_neuron[n] = -1;
+        cells->id_fired[n] = -1;
     }
 }
 
@@ -160,6 +167,33 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double 
 }
 
 
+void update_no_delay(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns)
+{
+    if (ic == NULL){
+        memset(cells->ic, 0, sz_d*cells->num_cells);
+    } else {
+        memcpy(cells->ic, ic, sz_d*cells->num_cells);
+    }
+
+    int *id_fired_bck = (int*) malloc(sizeof(int) * (bck_syns->num_pres));
+    gen_bck_spike(bck_syns, id_fired_bck);
+    update_syns_no_delay(bck_syns, id_fired_bck);
+    add_isyn_bck(bck_syns);
+    free(id_fired_bck);
+
+    update_syns_no_delay(syns, cells->id_fired);
+    add_isyn(syns);
+
+    update_neurons(cells, nstep);
+}
+
+
+// void update_delay()
+// {
+
+// }
+
+
 void add_isyn_bck(syn_t *syns)
 {
     /*** ic -= weight * r * vpost ***/
@@ -170,6 +204,7 @@ void add_isyn_bck(syn_t *syns)
 
     double *isyn = (double*) malloc_c(sz_d * N);
     read_ptr(N, isyn, syns->ptr_vpost);
+
     vdMul(N, rsyns, isyn, isyn); // W*r*v
     vdMul(N, syns->weight, isyn, isyn);
 
@@ -189,13 +224,22 @@ void add_isyn(syn_t *syns)
 
     double *rsyns = (double*) malloc_c(sz_d * N);
     read_ptr(N, rsyns, syns->ptr_r);
+    // fprintf(stderr, "r=%f-%f\n", rsyns[0], rsyns[1]);
 
     double *isyn = (double*) malloc_c(sz_d * N);
     read_ptr(N, isyn, syns->ptr_vpost);
+    // fprintf(stderr, "v=%f-%f\n", isyn[0], isyn[1]);
     
     cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
+    // fprintf(stderr, "v-veq=%f-%f\n", isyn[0], isyn[1]);
+
     vdMul(N, syns->weight, isyn, isyn);
+    // fprintf(stderr, "W*(v-veq)=%f-%f\n", isyn[0], isyn[1]);
+
     vdMul(N, rsyns, isyn, isyn);
+    // fprintf(stderr, "W*r*(v-veq)=%f-%f\n", isyn[0], isyn[1]);
+    // fprintf(stderr, "add_v = %d-%d / %x-%x\n", syns->id_post_neuron[0], syns->id_post_neuron[1], syns->ptr_vpost[0], syns->ptr_vpost[1]);
+    // fprintf(stderr, "add_i = %d-%d / %x-%x\n", syns->id_post_neuron[0], syns->id_post_neuron[1], syns->ptr_ipost[0], syns->ptr_ipost[1]);
 
     for (int n=0; n<N; n++){
         *(syns->ptr_ipost[n]) -= isyn[n];
@@ -226,7 +270,7 @@ void add_isyn_delay(syn_t *syns)
 }
 
 
-void update_neurons(neuron_t *cells, int nstep, int *id_fired_neuron)
+void update_neurons(neuron_t *cells, int nstep)
 {
     int N = cells->num_cells;
     double *dv = solve_deq_using_rk4(f_dv, N, cells->v, (void*) cells, NULL);
@@ -236,7 +280,7 @@ void update_neurons(neuron_t *cells, int nstep, int *id_fired_neuron)
     cblas_daxpy(N, 1, du, 1, cells->u, 1);
 
     // check spike
-    int *ptr_id = id_fired_neuron;
+    int *ptr_id = cells->id_fired;
     for (int n=0; n<N; n++){
         if (cells->v[n] > 30){
             cells->v[n] = cells->c[n];
@@ -254,10 +298,10 @@ void update_neurons(neuron_t *cells, int nstep, int *id_fired_neuron)
 }
 
 
-void update_syns_no_delay(syn_t *syns, int *id_fired_neuron)
+void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 {   
     double *dr = solve_deq_using_rk4(f_dr_syns_no_delay,
-                        syns->num_pres, syns->r, (void*) syns, (void*) id_fired_neuron);
+                        syns->num_pres, syns->r, (void*) syns, (void*) id_fired_pre);
     cblas_daxpy(syns->num_pres, 1, dr, 1, syns->r, 1);
     free_c(dr);
 }
@@ -338,7 +382,7 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 
     int *ptr_id = (int*) arg_fired;
     while (*ptr_id > -1){
-        dr[*ptr_id++] += _R; // _R/_dt * _dt
+        dr[*ptr_id++] += _R; // dx = deltafn(=_R/_dt) * _dt
     }
 
     vdMul(syns->num_pres, syns->inv_tau, dr, dr);
@@ -351,7 +395,7 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 // {
 //     /*** TODO: fill the function***/
 //     syn_t *syns = (syn_t*) arg_syn;
-//     int *id_fired_neuron = (int *) arg_fired;
+//     int *id_fired = (int *) arg_fired;
 // }
 
 
@@ -384,6 +428,81 @@ double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double 
 }
 
 
+void get_Kuramoto_order_params(int len, neuron_t *cells, double *rK, double *psiK)
+{   
+    int n, i, num_cells=cells->num_cells;
+    double *phase, *sum_real, *sum_imag, *ptr_sr, *ptr_si, *ptr_p;
+
+    phase    = (double*) malloc(sz_d * len);
+    sum_real = (double*) malloc(sz_d * len);
+    sum_imag = (double*) malloc(sz_d * len);
+
+    for (n=0; n<num_cells; n++){
+        get_spike_phase(cells->num_spk[n], len, cells->t_fired[n], phase);
+
+        ptr_sr = sum_real;
+        ptr_si = sum_imag;
+        ptr_p  = phase;
+
+        for (i=0; i<len; i++){
+            *ptr_sr++ += cos(*ptr_p);
+            *ptr_si++ += sin(*ptr_p++);
+        }
+    }
+
+    cblas_dscal(len, 1./num_cells, sum_real, 1);
+    cblas_dscal(len, 1./num_cells, sum_imag, 1);
+
+    // get Kuramoto order parameter
+    ptr_sr = sum_real;
+    ptr_si = sum_imag;
+    ptr_p  = psiK;
+    for (i=0; i<len; i++){
+        *ptr_p++ = atan2(*ptr_si++, *ptr_sr++); // +- phi
+    }
+
+    cblas_dnrm2(len, sum_real, 1);
+
+    ptr_sr = sum_real;
+    ptr_si = sum_imag;
+    ptr_p  = rK;
+    for (i=0; i<len; i++){
+        *ptr_p++ = sqrt(pow(*ptr_sr++, 2) + pow(*ptr_si++, 2));
+    }
+
+    free(phase);
+    free(sum_real);
+    free(sum_imag);
+}
+
+
+void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase)
+{
+    int i, *n0, *n1, tmp=0;
+
+    memset(phase, 0, sizeof(double) * nmax);
+
+    if (n_spk == 0){
+        return;
+    }
+
+    n0 = &tmp;
+    n1 = nsteps;
+    n_spk--;
+
+    for (i=0; i<nmax; i++){
+        if (i == *n1) {
+            if (n_spk == 0){
+                return;
+            }
+            n0 = n1;
+            n1++;
+        }
+        phase[i] = 2*PI * (i - *n0)/(*n1 - *n0);
+    }
+}
+
+
 double get_avg(int num_x, int **ptr_x)
 {
     double x = 0;
@@ -392,6 +511,17 @@ double get_avg(int num_x, int **ptr_x)
     }
     x /= num_x;
     return x;
+}
+
+
+void reset_spike(neuron_t *cells)
+{
+    for (int n=0; n<cells->num_cells; n++){
+        for (int i=0; i<cells->num_spk[n]; i++){
+            cells->t_fired[n][i] = 0;
+        }
+        cells->num_spk[n] = 0;
+    }
 }
 
 
@@ -408,13 +538,9 @@ void append_spike(int nstep, int *num_spk, int **t_spk)
 
 void read_ptr(int num_x, double *x, double **ptr_x)
 {
+    // #pragma omp parallel for if (num_x > 1000)
     for (int n=0; n<num_x; n++){
         x[n] = *(ptr_x[n]);
-        // if (n < 10){
-        //     fprintf(stderr, "x = %f\n", x[n]);
-        // }
-        
-        // x[n] = *(ptr_x[n]);
     }
 }
 
@@ -429,7 +555,7 @@ void free_neurons(neuron_t *cells)
     free_c(cells->c);
     free_c(cells->d);
     free(cells->num_spk);
-    free(cells->id_fired_neuron);
+    free(cells->id_fired);
     for (int n=0; n<cells->num_cells; n++){
         free(cells->t_fired[n]);
     }

@@ -54,7 +54,7 @@ void alloc2d(JSON_Array *arr, double x[_n_types][_n_types]);
 int main(int argc, char **argv)
 {
 
-    init_random_stream(time(NULL));
+    init_random_stream(2000);
 
     char fname[100] = "./simul_infos/single_ntk.json";
     if (argc == 2){
@@ -70,8 +70,6 @@ int main(int argc, char **argv)
 
 void run_simulation(char fjson[100])
 {
-
-    // _dt = 0.01;
     _R = 0.001;
 
     simulinfo_t info;
@@ -87,50 +85,35 @@ void run_simulation(char fjson[100])
     // run simulation
     int max_step = info.tmax/_dt;
     int ninp[2] = {info.sq_inp_t[0]/_dt, info.sq_inp_t[1]/_dt};
-    double amp = info.sq_amp;
     int num_exc = info.num_cells * info.cell_ratio[0];
-
-    int *id_fired_neuron = (int*) malloc(sizeof(int) * (info.num_cells+1));
-    int *id_fired_bck = (int*) malloc(sizeof(int) * (info.num_bck+1));
-    id_fired_neuron[0] = -1;
-    id_fired_bck[0] = -1;
 
     writer_t fp_obj;
     init_writer(&fp_obj, info.tag, V_ONLY | U_ONLY | I_ONLY | SPK_ONLY);
+    write_env(&fp_obj, info.num_cells, info.num_bck, info.tmax, _dt, info.cell_types);
 
     progbar_t bar;
     init_progressbar(&bar, max_step);
 
+    double *ic_inp = (double*) calloc(info.num_cells, sizeof(double));
+    for (int i=0; i<num_exc; i++){
+        ic_inp[i] = info.sq_amp;
+    }
+
     for (int n=0; n<max_step; n++){
-
-        memset(cells.ic, 0, sizeof(double)*info.num_cells);
+        double *ic;
         if ((n>ninp[0]) && (n<ninp[1])){
-            for (int i=0; i<num_exc; i++){
-                cells.ic[i] = amp;
-            }
+            ic = ic_inp;   
+        } else {
+            ic = NULL;
         }
+        
+        update_no_delay(n, ic, &cells, &syns, &bck_syns);
+        write(&fp_obj, n, &cells);
 
-        // update background
-        gen_bck_spike(&bck_syns, id_fired_bck);
-        update_syns_no_delay(&bck_syns, id_fired_bck);
-        add_isyn_bck(&bck_syns);
-
-        // update synapse
-        update_syns_no_delay(&syns, id_fired_neuron);
-        add_isyn(&syns);
-
-        // update neuron
-        update_neurons(&cells, n, id_fired_neuron);
-
-        write_data(fp_obj.fv, cells.num_cells, cells.v);
-        write_data(fp_obj.fu, cells.num_cells, cells.u);
-        write_data(fp_obj.fi, cells.num_cells, cells.ic);
-        write_spike(fp_obj.ft_spk, n, id_fired_neuron);
         progressbar(&bar, n);
     }
 
-    free(id_fired_neuron);
-    free(id_fired_bck);
+    free(info.cell_types);
     free_neurons(&cells);
     free_syns(&syns);
     free_syns(&bck_syns);
@@ -206,6 +189,7 @@ void init_simulation(simulinfo_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     gen_cell_type(info->num_cells, info->cell_ratio, cell_types);
 
     init_cell_vars(cells, info->num_cells, default_cell_params, cell_types);
+    info->cell_types = cell_types;
 
     ntk_t ntk_syn;
     init_bi_ntk(info->num_cells, info->num_cells, &ntk_syn);
@@ -230,7 +214,6 @@ void init_simulation(simulinfo_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     }
     
     free_bi_ntk(&ntk_bck_syn);
-    free(cell_types);
     free(bck_types);
 }
 

@@ -1,6 +1,7 @@
 #ifndef WRITER
 #define WRITER
 
+#include "izh.h"
 
 typedef enum _WRITER_VAR
 {
@@ -24,10 +25,13 @@ typedef struct _writer_t
 } writer_t;
 
 void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod);
+void write_env(writer_t *fid_obj, int num_cells, int num_bck, double tmax, double dt, int *cell_types);
+void write(writer_t *fid_obj, int nstep, neuron_t *cells);
 void write_data(FILE *fp, int num_x, double *x);
 void write_spike(FILE *fp, int nstep, int *t_spk);
 void end_writer(writer_t *fid_obj);
 FILE *open_file(char fname[100], char *type);
 void close_file(FILE *fid);
+int is_opened(writer_t *fid_obj, int mod);
 
 #endif
