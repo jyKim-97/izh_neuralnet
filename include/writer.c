@@ -3,23 +3,20 @@
 #include "writer.h"
 
 
-void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
+void init_writer(writer_t *fid_obj, char tag[50], WRITER_VAR mod)
 {
-    char fname[200];
+    char fname[100];
 
     fid_obj->mod = mod;
     strcpy(fid_obj->tag, tag);
 
     if (mod & 1){
-        sprintf(fname, "%s_fv.dat", tag);
         fid_obj->fv = open_file(fname, "wb");
     }   
     if (mod & 2){
-        sprintf(fname, "%s_fu.dat", tag);
         fid_obj->fu = open_file(fname, "wb");
     }
     if (mod & 4){
-        sprintf(fname, "%s_fi.dat", tag);
         fid_obj->fi = open_file(fname, "wb");
     }
     if (mod & 8){
@@ -29,7 +26,7 @@ void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
 }
 
 
-void write(writer_t *fid_obj, int nstep, neuron_t *cells)
+void write_result(writer_t *fid_obj, int nstep, neuron_t *cells)
 {
     int num_cells = cells->num_cells;
     if (fid_obj->mod & 1){
@@ -49,7 +46,7 @@ void write(writer_t *fid_obj, int nstep, neuron_t *cells)
 
 void write_env(writer_t *fid_obj, int num_cells, int num_bck, double tmax, double dt, int *cell_types)
 {
-    char fname[100];
+    char fname[1000];
     sprintf(fname, "%s_env.txt", fid_obj->tag);
     FILE *fp = fopen(fname, "w");
 
@@ -80,12 +77,12 @@ int is_opened(writer_t *fid_obj, int mod)
 }
 
 
-FILE *open_file(char fname[100], char *type)
+FILE *open_file(char fname[50], char *type)
 {
     FILE *fid = fopen(fname, type);
     if (fid == NULL){
         // printf();
-        char err_msg[100];
+        char err_msg[50];
         sprintf(err_msg, "File %s is not openned", fname);
         perror(err_msg);
     }
@@ -103,7 +100,7 @@ void close_file(FILE *fid)
 }
 
 
-void write_data (FILE *fp, int num_x, double *x)
+void write_data(FILE *fp, int num_x, double *x)
 {
     fwrite(x, sizeof(double), num_x, fp);
 }

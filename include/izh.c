@@ -18,8 +18,8 @@
 #ifdef USE_MKL_MEM
 
 #define ALIGN_SIZE
-#define malloc_c(size) MKL_malloc(size, 32)
-#define calloc_c(len, var_size) MKL_calloc(len, var_size, 32)
+#define malloc_c(size) MKL_malloc(size, 64)
+#define calloc_c(len, var_size) MKL_calloc(len, var_size, 64)
 #define free_c(arr) MKL_free(arr)
 
 #else
@@ -222,24 +222,19 @@ void add_isyn(syn_t *syns)
     /*** ic -= weight * r * (vpost - veq) ***/
     int N = syns->num_syns;
 
+    // int nid = 0;
+    // while (syns->id_pre_neuron[nid] < 80){
+    //     nid ++;
+    // }
+
     double *rsyns = (double*) malloc_c(sz_d * N);
     read_ptr(N, rsyns, syns->ptr_r);
-    // fprintf(stderr, "r=%f-%f\n", rsyns[0], rsyns[1]);
 
     double *isyn = (double*) malloc_c(sz_d * N);
     read_ptr(N, isyn, syns->ptr_vpost);
-    // fprintf(stderr, "v=%f-%f\n", isyn[0], isyn[1]);
-    
     cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
-    // fprintf(stderr, "v-veq=%f-%f\n", isyn[0], isyn[1]);
-
     vdMul(N, syns->weight, isyn, isyn);
-    // fprintf(stderr, "W*(v-veq)=%f-%f\n", isyn[0], isyn[1]);
-
     vdMul(N, rsyns, isyn, isyn);
-    // fprintf(stderr, "W*r*(v-veq)=%f-%f\n", isyn[0], isyn[1]);
-    // fprintf(stderr, "add_v = %d-%d / %x-%x\n", syns->id_post_neuron[0], syns->id_post_neuron[1], syns->ptr_vpost[0], syns->ptr_vpost[1]);
-    // fprintf(stderr, "add_i = %d-%d / %x-%x\n", syns->id_post_neuron[0], syns->id_post_neuron[1], syns->ptr_ipost[0], syns->ptr_ipost[1]);
 
     for (int n=0; n<N; n++){
         *(syns->ptr_ipost[n]) -= isyn[n];
@@ -432,8 +427,8 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
 {   
     int num_cells=cells->num_cells;
 
-    double *sum_real = (double*) malloc(sz_d * len);
-    double *sum_imag = (double*) malloc(sz_d * len);
+    double *sum_real = (double*) calloc(len, sz_d);
+    double *sum_imag = (double*) calloc(len, sz_d);
     int N = 0;
 
     for (int n=0; n<num_cells; n++){
@@ -450,6 +445,12 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
 
         vdCos(len, phase, tmp_real);
         vdSin(len, phase, tmp_imag);
+        // for (int n=0; n<len; n++){
+        //     tmp_real[n] = cos(phase[n]);
+        //     tmp_imag[n] = sin(phase[n]);
+
+        //     // sum_real[n] += tmp_real
+        // }
 
         vdAdd(len, tmp_real, sum_real, sum_real);
         vdAdd(len, tmp_imag, sum_imag, sum_imag);
@@ -464,7 +465,7 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
 
     // get Kuramoto order parameter
     for (int i=0; i<len; i++){
-        psiK[i] = atan2(sum_real[i], sum_imag[i]); // +- phi
+        psiK[i] = atan2(sum_real[i], sum_imag[i]); // [-phi, phi]
         rK[i] = sqrt(sum_real[i]*sum_real[i] + sum_imag[i]*sum_imag[i]);
     }
 
