@@ -11,12 +11,15 @@ void init_writer(writer_t *fid_obj, char tag[50], WRITER_VAR mod)
     strcpy(fid_obj->tag, tag);
 
     if (mod & 1){
+        sprintf(fname, "%s_fv.dat", tag);
         fid_obj->fv = open_file(fname, "wb");
     }   
     if (mod & 2){
+        sprintf(fname, "%s_fu.dat", tag);
         fid_obj->fu = open_file(fname, "wb");
     }
     if (mod & 4){
+        sprintf(fname, "%s_fi.dat", tag);
         fid_obj->fi = open_file(fname, "wb");
     }
     if (mod & 8){
@@ -84,7 +87,7 @@ FILE *open_file(char fname[50], char *type)
         // printf();
         char err_msg[50];
         sprintf(err_msg, "File %s is not openned", fname);
-        perror(err_msg);
+        perror();
     }
 
     return fid;
