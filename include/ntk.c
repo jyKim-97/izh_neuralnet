@@ -110,6 +110,8 @@ void gen_bi_random_ntk_fixed_indeg(int *pre_node_types, int *post_node_types,
             }
         }
     }
+
+    free(used);
 }
 
 

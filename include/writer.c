@@ -3,7 +3,7 @@
 #include "writer.h"
 
 
-void init_writer(writer_t *fid_obj, char tag[50], WRITER_VAR mod)
+void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
 {
     char fname[100];
 
@@ -80,14 +80,14 @@ int is_opened(writer_t *fid_obj, int mod)
 }
 
 
-FILE *open_file(char fname[50], char *type)
+FILE *open_file(char fname[], char *type)
 {
     FILE *fid = fopen(fname, type);
     if (fid == NULL){
         // printf();
         char err_msg[50];
         sprintf(err_msg, "File %s is not openned", fname);
-        perror();
+        perror(err_msg);
     }
 
     return fid;

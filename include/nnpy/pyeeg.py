@@ -3,8 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, sosfilt, hilbert, sosfiltfilt, resample
 
 try:
-    from spectral_connectivity import Multitaper
-    from spectral_connectivity import Connectivity
+    from spectral_connectivity import Multitaper, Connectivity
     # sc_load_fail = False
 except:
     # sc_load_fail = True
@@ -110,6 +109,7 @@ def downsample_signal(x, t, fs_org, fs_new, window=None):
 def measure_granger_causality(data, srate, method="pairwise_spectral_granger"):
     # measure granger causality
     # data (time series, samples, data class)
+    # gc (nt, class a, class b): class b -> class a
     m = Multitaper(data,
                    sampling_frequency=srate,
                    time_halfbandwidth_product=1,
@@ -117,7 +117,7 @@ def measure_granger_causality(data, srate, method="pairwise_spectral_granger"):
     
     c = Connectivity(fourier_coefficients=m.fft(),
                      frequencies=m.frequencies,
-                     time=m.time)
+                     time=m.time) 
     
     gc = c.pairwise_spectral_granger_prediction()
     return gc, c.frequencies

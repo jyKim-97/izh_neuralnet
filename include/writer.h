@@ -24,14 +24,14 @@ typedef struct _writer_t
 
 } writer_t;
 
-void init_writer(writer_t *fid_obj, char tag[50], WRITER_VAR mod);
+void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod);
 void write_env(writer_t *fid_obj, int  num_cells, int num_bck, double tmax, double dt, int *cell_types);
 void write_result(writer_t *fid_obj, int nstep, neuron_t *cells);
 // void write(int nstep);
 void write_data(FILE *fp, int num_x, double *x);
 void write_spike(FILE *fp, int nstep, int *t_spk);
 void end_writer(writer_t *fid_obj);
-FILE *open_file(char fname[50], char *type);
+FILE *open_file(char fname[], char *type);
 void close_file(FILE *fid);
 int is_opened(writer_t *fid_obj, int mod);
 

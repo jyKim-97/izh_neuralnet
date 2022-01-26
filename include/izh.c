@@ -4,14 +4,14 @@
 #include <math.h>
 #include <omp.h>
 
-#include <mkl.h>
-#include <mkl_vsl.h>
+#include "mkl.h"
+#include "mkl_vsl.h"
 #include "mt64.h"
 #include "izh.h"
 
 // set simulation env variable
 
-#define USE_MKL_MEM
+// #define USE_MKL_MEM
 #define sz_d sizeof(double)
 #define sz_i sizeof(int)
 
@@ -107,7 +107,7 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double 
 
     // create objs
     if (syns->type == DELAY){
-        syns->r = (double*) calloc_c(num_pres, sz_d);
+        syns->r = (double*) calloc_c(num_syns, sz_d);
         syns->inv_tau = (double*) malloc_c(sz_d * num_syns);
         syns->ptr_r = NULL;
     } else {
@@ -582,6 +582,7 @@ void free_syns(syn_t *syns)
     
     if (syns->type == BACKGROUND){
         free(syns->p_fire);
+        free(syns->ptr_r);
     } else if (syns->type == DELAY) {
         free(syns->delay);
     }
