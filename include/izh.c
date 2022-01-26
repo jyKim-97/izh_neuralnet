@@ -575,8 +575,6 @@ void free_syns(syn_t *syns)
 
     free(syns->id_pre_neuron);
     free(syns->id_post_neuron);
-
-    free(syns->ptr_r);
     free(syns->ptr_vpost);
     free(syns->ptr_ipost);
     
@@ -585,6 +583,8 @@ void free_syns(syn_t *syns)
         free(syns->ptr_r);
     } else if (syns->type == DELAY) {
         free(syns->delay);
+    } else {
+        free(syns->ptr_r);
     }
 }
 
