@@ -84,5 +84,6 @@ void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase);
 void free_neurons(neuron_t *cells);
 void free_syns(syn_t *syns);
 void free_rand_stream();
+void destroy_mkl_buffers();
 
 #endif

@@ -593,3 +593,10 @@ void free_rand_stream()
 {
     vslDeleteStream(&rand_stream);
 }
+
+
+void destroy_mkl_buffers()
+{
+    vslDeleteStream(&rand_stream);
+    mkl_free_buffers();
+}
