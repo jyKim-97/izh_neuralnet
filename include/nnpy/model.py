@@ -48,6 +48,43 @@ def const_current(N, n_on, amp, cell_types=None):
             yield 0
 
 
+class SingleCell():
+    def __init__(self, a, b, c, d, dt=0.01):
+        self.a = a
+        self.b = b
+        self.c = c
+        self.d = d
+        self.ic_t = None
+        self.ic_amp = 1
+        self.dt = dt
+
+    def set_square_current(self, input_time, amp):
+        self.ic_t = input_time
+        self.ic_amp = amp
+
+    def run(self, tmax, ic=None):
+        nitr = int(tmax/self.dt)+1
+        self.vs = np.zeros(nitr)
+        self.us = np.zeros(nitr)
+        self.ts = np.arange(nitr) * self.dt
+
+    def update(self, n, ic):
+        vnew = update_x_rk4(self._fv, self.dt, self.v, self.u, ic+self.isyn)
+        unew = update_x_rk4(self._fu, self.dt, self.u, self.v, self.a, self.b)
+        
+
+    def _fv(self, v, u, I):
+        return 0.04*v**2 + 5*v + 140 - u + I
+
+    def _fu(self, u, v, a, b):
+        return a * (b*v - u)
+
+    def find_spk(self, vs):
+        ids = vs >= 30
+        return ids
+
+
+
 # Network models
 class NeuralNet(metaclass=ABCMeta):
     def __init__(self, dt=0.01):

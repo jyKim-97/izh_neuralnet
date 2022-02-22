@@ -86,19 +86,50 @@ class PAC:
         return phs, amp
     
 
-def get_fft_with_t(x, t, dt=None, t_range=None):
-    # use Fourier transform without 
-    if t_range is None:
-        t_range = [t[0], t[-1]]
-    
-    idt = (t >= t_range[0]) & (t < t_range[1])
-    N = sum(idt)
-    
-    freq = np.linspace(0, 1/(2*dt), N//2)
-    yf = np.fft.fft(x[idt])
+def get_fft(x, fs, wbin=None, wbin_t=None):
+    if wbin is None and wbin_t is None:
+        N = len(x)
+    elif wbin_t is not None:
+        N = int(wbin_t*fs)
+
+    yf = np.fft.fft(x, axis=0, n=N)
     yf = 2/N * np.abs(yf[:N//2])
+    freq = np.linspace(0, 1/2*fs, N//2)
+    return yf, freq
+
+
+def get_stfft(x, t, fs, mbin_t=None, wbin_t=None, f_range=None, buf_size=100):
     
-    return freq, yf
+    wbin = int(wbin_t * fs)
+    mbin = int(mbin_t * fs)
+    window = np.hanning(wbin)
+    
+    ind = np.arange(wbin//2, len(t)-wbin//2, mbin, dtype=int)
+    psd = np.zeros([wbin//2, len(ind)])
+    
+    n_id = 0
+    while n_id < len(ind):
+        n_buf = min([buf_size, len(ind)-n_id])
+        y = np.zeros([wbin, n_buf])
+
+        for i in range(n_buf):
+            n = i + n_id
+            n0 = max([0, ind[n]-wbin//2])
+            n1 = min([ind[n]+wbin//2, len(t)])
+            y[n0-(ind[n]-wbin//2):wbin-(ind[n]+wbin//2)+n1, i] = x[n0:n1]
+        y = y * window[:,np.newaxis]
+        yf, fpsd = get_fft(y, fs)
+        psd[:, n_id:n_id+n_buf] = yf
+
+        n_id += n_buf
+    
+    if f_range is not None:
+        idf = (fpsd >= f_range[0]) & (fpsd <= f_range[1])
+        psd = psd[idf, :]
+        fpsd = fpsd[idf]
+    tpsd = ind / fs
+    
+    return psd, fpsd, tpsd
 
 
 def downsample_signal(x, t, fs_org, fs_new, window=None):
