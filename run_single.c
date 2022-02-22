@@ -10,6 +10,7 @@
 #include "utils.h"
 #include "writer.h"
 
+// #define STP
 
 typedef struct _simulinfo_t {
 
@@ -24,6 +25,7 @@ typedef struct _simulinfo_t {
     double p_fire_bck, tau_bck;
     double g_bck[_n_types]; // coupling strength for each cell types
     double p_bck[_n_types]; // connection probability
+    double tau_in_stp, tau_r_stp;
 
     double tmax;
 
@@ -107,7 +109,12 @@ void run_simulation(char fjson[100])
             ic = NULL;
         }
         
+        #ifndef STP
         update_no_delay(n, ic, &cells, &syns, &bck_syns);
+        #else
+        update_no_delay_stp(n, ic, &cells, &syns, &bck_syns);
+        #endif
+
         write(&fp_obj, n, &cells);
 
         progressbar(&bar, n);
@@ -118,6 +125,7 @@ void run_simulation(char fjson[100])
     free_syns(&syns);
     free_syns(&bck_syns);
     free_rand_stream();
+    destroy_mkl_buffers();
 }
 
 
@@ -138,6 +146,9 @@ void read_single_info(char fjson[100], simulinfo_t *info)
     arr = json_object_get_array(root_obj, "p_syn");
     alloc2d(arr, info->p_syn);
 
+    info->tau_in_stp = json_object_get_number(root_obj, "tau_in_stp");
+    info->tau_r_stp  = json_object_get_number(root_obj, "tau_r_stp");
+
     info->num_bck = json_object_get_number(root_obj, "num_bck");
     info->p_fire_bck = json_object_get_number(root_obj, "fr_bck");
     info->p_fire_bck = info->p_fire_bck / 1000 * _dt;
@@ -154,7 +165,11 @@ void read_single_info(char fjson[100], simulinfo_t *info)
     arr = json_object_get_array(root_obj, "sq_inp_t");
     alloc1d(arr, info->sq_inp_t);
 
+    #ifndef STP
     sprintf(info->tag, "%s", json_object_get_string(root_obj, "tag"));
+    #else
+    sprintf(info->tag, "%s_stp", json_object_get_string(root_obj, "tag"));
+    #endif
     
     json_value_free(root_value);
 }
@@ -197,6 +212,9 @@ void init_simulation(simulinfo_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     init_syn_vars(syns, info->num_cells, NO_DELAY, &ntk_syn, default_syn_veq,
                     default_syn_tau, cells->v, cells->ic);
     free_bi_ntk(&ntk_syn);
+
+    syns->tau_in = info->tau_in_stp;
+    syns->tau_r = info->tau_r_stp;
 
     ntk_t ntk_bck_syn;
     int *bck_types = (int*) calloc(info->num_bck, sizeof(int));

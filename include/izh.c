@@ -35,9 +35,9 @@
 VSLStreamStatePtr rand_stream;
 
 
-// TODO: TWO cell interaction 확인해봐야될듯? inh가 잘 안들어가는 느낌
 // TODO: 특정 initializing 함수들이 call됬는지 확인 변수 있으면 좋을듯
-// TODO: compile bash도 따로 하나 general하게 만들면 좋을듯
+// UPDATE NOTE
+// 1. Changed synaptic equation solver: rk4 -> euler
 
 
 double _dt = 0.005; // simulation time step
@@ -114,6 +114,9 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double 
         syns->r = (double*) calloc_c(num_pres, sz_d);
         syns->inv_tau = (double*) malloc_c(sz_d * num_pres);
         syns->ptr_r = (double**) malloc(sizeof(double*) * num_syns);
+        syns->x = (double*) malloc_c(sz_d * num_pres);
+        for (int i=0; i<num_pres; i++) { syns->x[i] = 1; }
+        syns->z = (double*) calloc_c(num_pres, sz_d);
     }
 
     syns->weight = (double*) malloc_c(sz_d * num_syns);
@@ -182,6 +185,27 @@ void update_no_delay(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t 
     free(id_fired_bck);
 
     update_syns_no_delay(syns, cells->id_fired);
+    add_isyn(syns);
+
+    update_neurons(cells, nstep);
+}
+
+
+void update_no_delay_stp(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns)
+{
+    if (ic == NULL){
+        memset(cells->ic, 0, sz_d*cells->num_cells);
+    } else {
+        memcpy(cells->ic, ic, sz_d*cells->num_cells);
+    }
+
+    int *id_fired_bck = (int*) malloc(sizeof(int) * (bck_syns->num_pres));
+    gen_bck_spike(bck_syns, id_fired_bck);
+    update_syns_no_delay(bck_syns, id_fired_bck);
+    add_isyn_bck(bck_syns);
+    free(id_fired_bck);
+
+    update_syns_no_delay_stp(syns, cells->id_fired);
     add_isyn(syns);
 
     update_neurons(cells, nstep);
@@ -295,7 +319,7 @@ void update_neurons(neuron_t *cells, int nstep)
 
 void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 {   
-    double *dr = solve_deq_using_rk4(f_dr_syns_no_delay,
+    double *dr = solve_deq_using_euler(f_dr_syns_no_delay,
                         syns->num_pres, syns->r, (void*) syns, (void*) id_fired_pre);
     cblas_daxpy(syns->num_pres, 1, dr, 1, syns->r, 1);
     free_c(dr);
@@ -305,6 +329,24 @@ void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 void update_syns_delay(syn_t *syns)
 {
     /*** TODO: fill this function ***/
+}
+
+
+void update_syns_no_delay_stp(syn_t *syns, int *id_fired_pre)
+{
+    int N = syns->num_pres;
+
+    double *dr = solve_deq_using_euler(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    double *dz = solve_deq_using_euler(f_dz_syns_stp, N, syns->z, (void*) syns, NULL);
+
+    cblas_daxpy(N, 1, dr, 1, syns->r, 1);
+    cblas_daxpy(N, 1, dz, 1, syns->z, 1);
+
+    cblas_daxpy(N, 1, dz, 1, dr, 1); // dr = dr + dz, dx = -dr
+    cblas_daxpy(N, -1, dr, 1, syns->x, 1); // dx + dr + dz = 0
+    
+    free_c(dr);
+    free_c(dz);
 }
 
 
@@ -366,6 +408,37 @@ double *f_du(double *u, void *arg_neuron, void *arg_null)
 }
 
 
+double *f_dz_syns_stp(double *z, void *arg_syn, void *arg_null)
+{
+    syn_t *syns = (syn_t*) arg_syn;
+    double *dz = (double*) malloc_c(sz_d * syns->num_pres);
+
+    memcpy(dz, z, sz_d*syns->num_pres);
+    cblas_daxpby(syns->num_pres, _dt/syns->tau_in, syns->r, 1, -_dt/syns->tau_r, dz, 1);
+
+    return dz;
+}
+
+
+double *f_dr_syns_no_delay_stp(double *r, void *arg_syn, void *arg_fired)
+{
+    syn_t *syns = (syn_t*) arg_syn;
+    double *dr = (double*) malloc_c(sz_d * syns->num_pres);
+
+    memcpy(dr, r, sz_d*syns->num_pres);
+    cblas_dscal(syns->num_pres, -_dt, dr, 1);
+    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
+
+    int *ptr_id = (int*) arg_fired;
+    while (*ptr_id > -1){
+        dr[*ptr_id] += _R * syns->x[*ptr_id]; // dx = deltafn(=_R/_dt) * _dt
+        ptr_id++;
+    }
+    
+    return dr;
+}
+
+
 double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 {
     /*** dr/dt = (-r + R\delta) / tau ***/
@@ -374,13 +447,14 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 
     memcpy(dr, r, sz_d*syns->num_pres);
     cblas_dscal(syns->num_pres, -_dt, dr, 1);
+    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
 
     int *ptr_id = (int*) arg_fired;
     while (*ptr_id > -1){
         dr[*ptr_id++] += _R; // dx = deltafn(=_R/_dt) * _dt
     }
 
-    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
+    // vdMul(syns->num_pres, syns->inv_tau, dr, dr);
 
     return dr;
 }
@@ -392,6 +466,13 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 //     syn_t *syns = (syn_t*) arg_syn;
 //     int *id_fired = (int *) arg_fired;
 // }
+
+
+double *solve_deq_using_euler(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2)
+{
+    double *dx = f(x, arg1, arg2);
+    return dx;
+}
 
 
 double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2)
