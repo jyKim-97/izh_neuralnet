@@ -10,7 +10,7 @@
 #include "utils.h"
 #include "writer.h"
 
-// #define STP
+#define STP
 
 typedef struct _simulinfo_t {
 
@@ -115,7 +115,7 @@ void run_simulation(char fjson[100])
         update_no_delay_stp(n, ic, &cells, &syns, &bck_syns);
         #endif
 
-        write(&fp_obj, n, &cells);
+        write_result(&fp_obj, n, &cells);
 
         progressbar(&bar, n);
     }
