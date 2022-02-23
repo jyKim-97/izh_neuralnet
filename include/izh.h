@@ -4,7 +4,6 @@
 #include "ntk.h"
 
 extern double _dt;
-extern double _R;
 
 typedef enum _SYN_TYPE {
     BACKGROUND = 0,

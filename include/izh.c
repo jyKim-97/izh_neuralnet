@@ -38,10 +38,9 @@ VSLStreamStatePtr rand_stream;
 // TODO: 특정 initializing 함수들이 call됬는지 확인 변수 있으면 좋을듯
 // UPDATE NOTE
 // 1. Changed synaptic equation solver: rk4 -> euler
-
+// 2. Removed _R
 
 double _dt = 0.005; // simulation time step
-double _R  = 1;  // 
 const double default_cell_params[4][4]= {
             {0.02, 0.2, -65, 8},    // RS
             {0.1, 0.2, -65, 2},   // FS
@@ -431,7 +430,7 @@ double *f_dr_syns_no_delay_stp(double *r, void *arg_syn, void *arg_fired)
 
     int *ptr_id = (int*) arg_fired;
     while (*ptr_id > -1){
-        dr[*ptr_id] += _R * syns->x[*ptr_id]; // dx = deltafn(=_R/_dt) * _dt
+        dr[*ptr_id] += syns->x[*ptr_id]; // dx = deltafn(=_R/_dt) * _dt
         ptr_id++;
     }
     
@@ -451,7 +450,7 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 
     int *ptr_id = (int*) arg_fired;
     while (*ptr_id > -1){
-        dr[*ptr_id++] += _R; // dx = deltafn(=_R/_dt) * _dt
+        dr[*ptr_id++] += 1; // dx = deltafn(=1/_dt) * _dt
     }
 
     // vdMul(syns->num_pres, syns->inv_tau, dr, dr);
