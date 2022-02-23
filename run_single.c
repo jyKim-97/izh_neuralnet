@@ -10,7 +10,7 @@
 #include "utils.h"
 #include "writer.h"
 
-#define STP
+// #define STP
 
 typedef struct _simulinfo_t {
 
@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 
 void run_simulation(char fjson[100])
 {
-    _R = 0.001;
+    _R = 1;
 
     simulinfo_t info;
     read_single_info(fjson, &info);
@@ -101,6 +101,10 @@ void run_simulation(char fjson[100])
         ic_inp[i] = info.sq_amp;
     }
 
+    #ifdef STP
+    FILE *fp_x = fopen("./data/sample_x.txt", "wb");
+    #endif
+
     for (int n=0; n<max_step; n++){
         double *ic;
         if ((n>ninp[0]) && (n<ninp[1])){
@@ -113,12 +117,17 @@ void run_simulation(char fjson[100])
         update_no_delay(n, ic, &cells, &syns, &bck_syns);
         #else
         update_no_delay_stp(n, ic, &cells, &syns, &bck_syns);
+        fwrite(syns.x, sizeof(double), syns.num_pres, fp_x);
         #endif
 
         write_result(&fp_obj, n, &cells);
 
         progressbar(&bar, n);
     }
+
+    #ifdef STP
+    fclose(fp_x);
+    #endif
 
     free(info.cell_types);
     free_neurons(&cells);

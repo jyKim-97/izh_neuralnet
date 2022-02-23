@@ -336,7 +336,7 @@ void update_syns_no_delay_stp(syn_t *syns, int *id_fired_pre)
 {
     int N = syns->num_pres;
 
-    double *dr = solve_deq_using_euler(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    double *dr = solve_deq_using_euler(f_dr_syns_no_delay_stp, N, syns->r, (void*) syns, (void*) id_fired_pre);
     double *dz = solve_deq_using_euler(f_dz_syns_stp, N, syns->z, (void*) syns, NULL);
 
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
