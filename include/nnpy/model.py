@@ -1,3 +1,4 @@
+from lzma import CHECK_SHA256
 import numpy as np
 from abc import *
 from time import time
@@ -48,30 +49,47 @@ def const_current(N, n_on, amp, cell_types=None):
             yield 0
 
 
-class SingleCell():
-    def __init__(self, a, b, c, d, dt=0.01):
+class SingleCell:
+    def __init__(self, a, b, c, d, ic_time=None, ic_amp=None, dt=0.01):
         self.a = a
         self.b = b
         self.c = c
         self.d = d
-        self.ic_t = None
-        self.ic_amp = 1
         self.dt = dt
 
-    def set_square_current(self, input_time, amp):
-        self.ic_t = input_time
-        self.ic_amp = amp
-
-    def run(self, tmax, ic=None):
+    def run(self, tmax, ic_custom=None, ic_sq_t=None, ic_sq_amp=None):
         nitr = int(tmax/self.dt)+1
+
+        ic_sq_n = ic_sq_t
+        if ic_sq_t is not None:
+            ic_sq_n[0] /= self.dt
+            ic_sq_n[1] /= self.dt
+            ic_square = True
+        else:
+            ic_square = False
+
         self.vs = np.zeros(nitr)
         self.us = np.zeros(nitr)
+        self.ics = np.zeros(nitr-1)
+        self.nid_spk = []
         self.ts = np.arange(nitr) * self.dt
+        self.vs[0] = self.c
 
-    def update(self, n, ic):
-        vnew = update_x_rk4(self._fv, self.dt, self.v, self.u, ic+self.isyn)
-        unew = update_x_rk4(self._fu, self.dt, self.u, self.v, self.a, self.b)
-        
+        for n in range(nitr-1):
+            ic = 0
+            if ic_custom is not None:
+                ic += ic_custom[n]
+            if ic_square and (ic_sq_n[0] <= n < ic_sq_n[1]):
+                ic += ic_sq_amp
+
+            self.update(n, ic=ic)
+            self.ics[n] = ic
+
+
+    def update(self, n, ic=0):
+        self.vs[n+1] = update_x_rk4(self._fv, self.dt, self.vs[n], self.us[n], ic)
+        self.us[n+1] = update_x_rk4(self._fu, self.dt, self.us[n], self.vs[n], self.a, self.b)
+        self.check_spk(n+1)
 
     def _fv(self, v, u, I):
         return 0.04*v**2 + 5*v + 140 - u + I
@@ -79,10 +97,56 @@ class SingleCell():
     def _fu(self, u, v, a, b):
         return a * (b*v - u)
 
-    def find_spk(self, vs):
-        ids = vs >= 30
-        return ids
+    def check_spk(self, n):
+        is_spk = self.vs[n] >= 30
+        if is_spk:
+            self.vs[n] = self.c
+            self.nid_spk.append(n)
 
+
+def draw_single_result(obj, idt_show=None):
+
+    import matplotlib.pyplot as plt
+
+    if idt_show is None:
+        idt_show = np.ones(len(obj.ts), dtype=bool)
+
+    def set_axes():
+        plt.xticks(fontsize=9)
+        plt.yticks(fontsize=9)
+    
+    def draw_current(obj):
+        plt.twinx()
+        plt.plot(obj.ts[1:], obj.ics, 'r', lw=2)
+        yl = [min(obj.ics)-1, max(obj.ics)*10]
+        plt.ylim(yl)
+        plt.ylabel("input current", fontsize=11)
+        set_axes()
+
+    plt.figure(dpi=150, figsize=(8,8))
+
+    plt.subplot(211)
+    plt.plot(obj.vs[idt_show], obj.us[idt_show], 'k', lw=1)
+    plt.xlabel("v", fontsize=12)
+    plt.ylabel("u", fontsize=12)
+    plt.title("a=%.3f, b=%.3f, c=%.3f, d=%.3f"%(obj.a, obj.b, obj.c, obj.d), fontsize=14)
+
+    plt.subplot(223)
+    plt.plot(obj.ts[idt_show], obj.vs[idt_show], 'k', lw=1)
+    plt.xlabel("time (ms)", fontsize=12)
+    plt.ylabel("voltage (v) (mV)", fontsize=12)
+    set_axes()
+    draw_current(obj)
+    plt.ylabel("")
+
+    plt.subplot(224)
+    plt.plot(obj.ts[idt_show], obj.us[idt_show], 'k', lw=1)
+    plt.xlabel("time (ms)", fontsize=12)
+    plt.ylabel("u", fontsize=12)
+    set_axes()
+    draw_current(obj)
+    
+    plt.tight_layout()
 
 
 # Network models
@@ -303,3 +367,63 @@ class IzhExpNet_poisson_input(IzhExpNet):
             return Iext - self.v * gr
         else:
             return Iext
+
+
+if __name__=="__main__":
+
+    import matplotlib.pyplot as plt
+
+    # a = 0.1
+    # b = 0.2
+    # c = -65
+    # d = 2
+    # ic_sq_amp = 3.87
+    a = 0.02
+    b = 0.25
+    c = -65
+    d = 2
+    ic_sq_amp = 0.6
+
+    dt = 0.05
+    tmax = 1200
+    ic_sq_t = [500, 1000]
+
+    ic_custom = np.zeros(int(tmax/dt))
+    for n in range(int(tmax/dt)):
+        if (520 <= n*dt < 550):
+            ic_custom[n] = 1e-1
+    
+    obj = SingleCell(a, b, c, d, dt=dt)
+    obj.run(tmax, ic_sq_t=ic_sq_t, ic_custom=ic_custom, ic_sq_amp=ic_sq_amp)
+
+    idt_show = 10 <= obj.ts
+    draw_single_result(obj, idt_show)
+    plt.savefig("./test_single_cell.png")
+    plt.close()
+    
+    # plt.figure(dpi=150, figsize=(8,8))
+
+    # plt.subplot(211)
+    # plt.plot(obj.vs[idt_show], obj.us[idt_show], 'k', lw=1)
+    # plt.xlabel("v", fontsize=12)
+    # plt.ylabel("u", fontsize=12)
+    # plt.title("a=%.3f, b=%.3f, c=%.3f, d=%.3f"%(obj.a, obj.b, obj.c, obj.d), fontsize=14)
+
+    # plt.subplot(223)
+    # plt.plot(obj.ts[idt_show], obj.vs[idt_show], 'k', lw=1)
+    # plt.xlabel("time (ms)", fontsize=12)
+    # plt.ylabel("voltage (v) (mV)", fontsize=12)
+    # set_axes()
+    # draw_current(obj)
+    # plt.ylabel("")
+
+    # plt.subplot(224)
+    # plt.plot(obj.ts[idt_show], obj.us[idt_show], 'k', lw=1)
+    # plt.xlabel("time (ms)", fontsize=12)
+    # plt.ylabel("u", fontsize=12)
+    # set_axes()
+    # draw_current(obj)
+    
+    # plt.tight_layout()
+    # plt.savefig("./test_single_cell.png")
+    # plt.close()

@@ -1,5 +1,7 @@
 # izh_neuralnet
 Simulation codes for Izhikevich neural network 
+[![Top Langs](https://github.com/jyKim-97/izh_neuralnet.vercel.app/api/top-langs/?username=anuraghazra&hide=python)](https://github.com/anuraghazra/github-readme-stats)
+
 
 # Prerequisites
 * gcc 5.4.0 (gnu 11)
