@@ -40,6 +40,12 @@ typedef struct _syn_t
     double *r, **ptr_r;
     double *veq, *weight;
     double *inv_tau;
+    // short-term plasticity method
+    // depression
+    double *x, *z; // x+r+z=1
+    double *u;
+    double tau_in, tau_r;
+    double U, tau_facil;
 
     double **ptr_vpost;
     double **ptr_ipost;
@@ -57,6 +63,7 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int
 void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double cell_veq[], double cell_tau[], double *vpost, double *ipost);
 
 void update_no_delay(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
+void update_no_delay_stp(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
 
 void add_isyn_bck(syn_t *syns);
 void add_isyn(syn_t *syns);
@@ -65,13 +72,16 @@ void add_isyn_delay(syn_t *syns);
 void update_neurons(neuron_t *cells, int nstep);
 void update_syns_no_delay(syn_t *syns, int *id_fired_pre);
 void update_syns_delay(syn_t *syns); // need to udpate
-
+void update_syns_no_delay_stp(syn_t *syns, int *id_fired_pre);
 void gen_bck_spike(syn_t *bck_syns, int *id_fired_bck);
 
 double *f_dv(double *v, void *arg_neuron, void *arg_null);
 double *f_du(double *u, void *arg_neuron, void *arg_null);
 double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired);
 // double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_fired);
+double *f_dz_syns_stp(double *z, void *arg_syn, void *arg_null);
+double *f_dr_syns_no_delay_stp(double *r, void *arg_syn, void *arg_fired);
+double *solve_deq_using_euler(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2);
 double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2);
 void append_spike(int nstep, int *num_spk, int **t_spk);
 void read_ptr(int num_x, double *x, double **ptr_x);

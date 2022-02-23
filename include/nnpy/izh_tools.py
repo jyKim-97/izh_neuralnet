@@ -44,7 +44,7 @@ class IzhReader:
 def read_tspk(fname, N, ts):
     t_spks = [[] for i in range(N)]
     with open(fname, "r") as fid:
-        line = fid.readline()
+        line = fid.readline() 
     data = line.split(",")[:-1]
     for pair in data:
         nstep, nid = pair.split("-")
@@ -56,7 +56,8 @@ def read_byte_data(fname, N):
     with open(fname, "rb") as fid:
         data = np.fromfile(fid, dtype=np.dtype(np.double))
     nline = len(data) // N
-    return data.reshape([N, nline], order='C')
+    # return data.reshape([N, nline], order='C')
+    return data.reshape([nline, N], order='C').T
 
 
 def get_phase(t_spks, N, ts):
