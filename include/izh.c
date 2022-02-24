@@ -113,6 +113,9 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double 
         syns->r = (double*) calloc_c(num_pres, sz_d);
         syns->inv_tau = (double*) malloc_c(sz_d * num_pres);
         syns->ptr_r = (double**) malloc(sizeof(double*) * num_syns);
+    }
+
+    if (syns->type == NO_DELAY){
         syns->x = (double*) malloc_c(sz_d * num_pres);
         for (int i=0; i<num_pres; i++) { syns->x[i] = 1; }
         syns->z = (double*) calloc_c(num_pres, sz_d);
@@ -663,6 +666,8 @@ void free_syns(syn_t *syns)
         free(syns->ptr_r);
     } else if (syns->type == DELAY) {
         free(syns->delay);
+        free(syns->x);
+        free(syns->z);
     } else {
         free(syns->ptr_r);
     }

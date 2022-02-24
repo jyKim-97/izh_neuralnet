@@ -6,11 +6,19 @@ sys.path.append('./include/')
 import nnpy.izh_tools as it
 
 
+fdir_data = "./data/"
+fdir_figs = "./figs/"
+
 if __name__ == "__main__":
-    tag = "./data/single_ntk"
+    import os
+
+    tag = "single_ntk"
+    if len(sys.argv) == 2:
+        tag = sys.argv[1]
+
     nid = 10
     
-    obj = it.IzhReader(tag)
+    obj = it.IzhReader(os.path.join(fdir_data, tag))
 
     kwargs = {"lw":1, "color":"k"}
     
@@ -19,7 +27,7 @@ if __name__ == "__main__":
         plt.xticks(fontsize=8)
         plt.yticks(fontsize=8)
     
-    plt.figure(dpi=150, figsize=(9, 5))
+    plt.figure(dpi=150, figsize=(8, 5))
     plt.subplot(231)
     plt.plot(obj.ts, obj.vs[nid], **kwargs)
     set_ax()
@@ -41,5 +49,5 @@ if __name__ == "__main__":
     plt.ylabel("cell id", fontsize=10)
     
     plt.tight_layout()
-    plt.savefig("./test.png")
-    # plt.show()
+    plt.savefig(os.path.join(fdir_figs, tag+"_result.png"))
+    plt.close()

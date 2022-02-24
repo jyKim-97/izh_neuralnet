@@ -66,7 +66,7 @@ int main(int argc, char **argv)
     double ic_sq_amp = 5;
 
     run_simulation(fname, ic_sq_t, ic_sq_amp);
-    printf("\nDone\n");
+    printf("[Done\n");
 
     return 0;
 }
