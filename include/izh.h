@@ -2,6 +2,7 @@
 #define IZH
 
 #include "ntk.h"
+#define MAX_TYPE 6
 
 extern double _dt;
 
@@ -57,6 +58,33 @@ typedef struct _syn_t
 
 } syn_t;
 
+
+typedef struct _network_info_t
+{
+    int num_cells;
+    double cell_type_ratio[MAX_TYPE];
+    double cell_params[MAX_TYPE][4]; // num_types * 4 or NULL
+    // synapse
+    double psyns[MAX_TYPE][MAX_TYPE]; // pre (row) / post (col)
+    double gsyns[MAX_TYPE][MAX_TYPE];
+    double syn_tau[MAX_TYPE]; // num_types
+    double syn_veq[MAX_TYPE]; // num_types
+
+    int num_bck;
+    double bck_type_ratio[MAX_TYPE];
+
+    double pbck[MAX_TYPE][MAX_TYPE];
+    double gbck[MAX_TYPE][MAX_TYPE];
+    double bck_tau[MAX_TYPE];
+    double bck_veq[MAX_TYPE];
+    double frbck[MAX_TYPE]; // size = num_bck_types
+
+    int *cell_types;
+    ntk_t ntk_syns;
+
+} network_info_t;
+
+
 void init_random_stream(long int seed);
 void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int *cell_types);
 void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double cell_veq[], double cell_tau[], double *vpost, double *ipost);
@@ -94,5 +122,10 @@ void free_neurons(neuron_t *cells);
 void free_syns(syn_t *syns);
 void free_rand_stream();
 void destroy_mkl_buffers();
+
+void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
+void init_info(network_info_t *info);
+void free_info(network_info_t *info);
+int *gen_types(int num, double *ratio);
 
 #endif

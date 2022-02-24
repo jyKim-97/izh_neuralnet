@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import sys
 sys.path.append('./include/')
 import nnpy.izh_tools as it
-import nnpy.visu_tools as visu
 
 
 if __name__ == "__main__":
@@ -37,9 +36,10 @@ if __name__ == "__main__":
     plt.ylabel("$i_{cell}$", fontsize=10)
     
     plt.subplot(212)
-    visu.draw_raster_plot(obj.t_spks, xlim=[0, obj.tmax], ylim=[-1, obj.num_cells], cell_types=obj.cell_types)
+    it.draw_raster_plot(obj.t_spks, xlim=[0, obj.tmax], ylim=[-1, obj.num_cells], cell_types=obj.cell_types)
     set_ax()
     plt.ylabel("cell id", fontsize=10)
     
     plt.tight_layout()
-    plt.show()
+    plt.savefig("./test.png")
+    # plt.show()

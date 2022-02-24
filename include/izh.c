@@ -679,3 +679,87 @@ void destroy_mkl_buffers()
 {
     mkl_free_buffers();
 }
+
+
+void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns)
+{
+    info->cell_types = gen_types(info->num_cells, info->cell_type_ratio);
+
+    init_cell_vars(cells, info->num_cells, info->cell_params, info->cell_types);
+    
+    // init synapse
+    init_bi_ntk(info->num_cells, info->num_cells, &info->ntk_syns);
+    gen_bi_random_ntk_with_type(info->cell_types, info->cell_types, info->psyns, info->gsyns, &info->ntk_syns);
+    init_syn_vars(syns, info->num_cells, NO_DELAY, &info->ntk_syns,
+                        info->syn_veq, info->syn_tau, cells->v, cells->ic);
+    
+    int *bck_types = gen_types(info->num_bck, info->bck_type_ratio);
+    ntk_t ntk_bck;
+    init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck);
+    gen_bi_random_ntk_fixed_indeg(bck_types, bck_types, info->pbck, info->gbck, &ntk_bck);
+    init_syn_vars(bck_syns, info->num_bck, BACKGROUND, &ntk_bck, info->bck_veq, info->bck_tau, cells->v, cells->ic);
+    for (int n=0; n<info->num_bck; n++){
+        int tp = bck_types[n];
+        bck_syns->p_fire[n] = info->frbck[tp] * _dt / 1000.;
+    }
+
+    free_bi_ntk(&ntk_bck);
+}
+
+
+void init_info(network_info_t *info)
+{
+    for (int i=0; i<MAX_TYPE; i++){
+        info->cell_type_ratio[i] = 0;
+        info->bck_type_ratio[i] = 0;
+
+        info->syn_tau[i] = 0;
+        info->syn_veq[i] = 0;
+        info->bck_tau[i] = 0;
+        info->bck_veq[i] = 0;
+
+        info->frbck[i] = 0;
+
+        for (int j=0; j<MAX_TYPE; j++){
+            info->psyns[i][j] = 0;
+            info->gsyns[i][j] = 0;
+            info->pbck[i][j] = 0;
+            info->gbck[i][j] = 0;
+        }
+
+        for (int j=0; j<4; j++){
+            info->cell_params[i][j] = 0;
+        }
+    }
+}
+
+
+void free_info(network_info_t *info)
+{
+    free(info->cell_types);
+    free_bi_ntk(&info->ntk_syns);
+}
+
+
+int *gen_types(int num, double *ratio)
+{
+    int *types = (int*) malloc(sizeof(int) * num);
+
+    int n_type=0;
+    int n_type_init = 0;
+
+    for (int n=0; n<num; n++){
+        if (n-n_type_init >= (double) num*ratio[n_type]){
+            n_type ++;
+            n_type_init = n;
+        }
+        
+        if (n_type >= MAX_TYPE){
+            printf("wrong type selectd\n");
+        }
+
+        types[n] = n_type;
+    }
+
+    return types;
+}
