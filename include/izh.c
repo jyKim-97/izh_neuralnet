@@ -2,10 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <complex.h>
 #include <omp.h>
 
 #include "mkl.h"
 #include "mkl_vsl.h"
+#include "mkl_dfti.h"
 #include "mt64.h"
 #include "izh.h"
 
@@ -557,6 +559,51 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
 }
 
 
+double *get_fft(int len, double *x_in)
+{
+    // x_out is the (len+2) size array
+    DFTI_DESCRIPTOR_HANDLE handle = NULL;
+    MKL_LONG status;
+
+    double *x_out_tmp = (double*) malloc(sizeof(double) * (len+2));
+    double *x_out = (double*) malloc(sizeof(double) * (len/2+1));
+
+    status = DftiCreateDescriptor(&handle, DFTI_DOUBLE, DFTI_REAL, 1, len);
+    status = DftiSetValue(handle, DFTI_PLACEMENT, DFTI_NOT_INPLACE);
+    status = DftiCommitDescriptor(handle);
+    status = DftiComputeForward(handle, x_in, x_out_tmp);
+    status = DftiFreeDescriptor(&handle);
+
+    if (status && !DftiErrorClass(status, DFTI_NO_ERROR)){
+        printf("Error: %s\n", DftiErrorMessage(status));
+    }
+
+    for (int n=0; n<len/2+1; n++){
+        double x_real = x_out_tmp[2*n];
+        double x_imag = x_out_tmp[2*n+1];
+        x_out[n] = x_real*x_real + x_imag*x_imag;
+
+        if ((n>0)  && (n<len/2)){
+            x_out[n] *= 2;
+        }
+    }
+
+    free(x_out_tmp);
+    return x_out;
+}
+
+
+double *get_fft_freq(int len, double fs)
+{
+    double *freq = (double*) malloc(sizeof(double) * (len/2+1));
+    for (int n=0; n<len/2+1; n++){
+        freq[n] = fs * ((double) n) /  ((double) len);
+    }
+
+    return freq;
+}
+
+
 void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase)
 {
     int i, *n0, *n1, tmp=0;
@@ -697,6 +744,9 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     gen_bi_random_ntk_with_type(info->cell_types, info->cell_types, info->psyns, info->gsyns, &info->ntk_syns);
     init_syn_vars(syns, info->num_cells, NO_DELAY, &info->ntk_syns,
                         info->syn_veq, info->syn_tau, cells->v, cells->ic);
+
+    // int nn = info->ntk_syns.num_edges
+    // printf("w_end = %d-%d-%f\n", (info->ntk_syns).
     
     int *bck_types = gen_types(info->num_bck, info->bck_type_ratio);
     ntk_t ntk_bck;

@@ -115,8 +115,11 @@ void read_ptr(int num_x, double *x, double **ptr_x);
 double get_avg(int num_x, double *x, int *is_target);
 void reset_spike(neuron_t *cells);
 
+// mathematical functions
 void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double *rK, double *psiK);
 void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase);
+double *get_fft(int len, double *x_in);
+double *get_fft_freq(int len, double fs);
 
 void free_neurons(neuron_t *cells);
 void free_syns(syn_t *syns);
