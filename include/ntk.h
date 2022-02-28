@@ -2,7 +2,7 @@
 #define _NTK
 
 #define _ntk_block_size 500
-#define _n_types 4
+#define _n_types 6
 
 typedef struct _ntk_t {
 
@@ -16,6 +16,9 @@ typedef struct _ntk_t {
 
 
 void init_bi_ntk(int num_pre, int num_post, ntk_t *ntk);
+void gen_bi_random_ntk_mean_deg(int *pre_node_types, int *post_node_types, 
+                            int mean_out_deg[_n_types][_n_types],
+                            double str_cnt_type[_n_types][_n_types], ntk_t *ntk);
 void gen_bi_random_ntk_with_type(int *pre_node_types, int *post_node_types,
                             double p_cnt_type[_n_types][_n_types],
                             double str_cnt_type[_n_types][_n_types], ntk_t *ntk);

@@ -23,6 +23,76 @@ void init_bi_ntk(int num_pre, int num_post, ntk_t *ntk)
 }
 
 
+void gen_bi_random_ntk_mean_deg(int *pre_node_types, int *post_node_types, 
+                            int mean_out_deg[_n_types][_n_types],
+                            double str_cnt_type[_n_types][_n_types], ntk_t *ntk)
+{
+    int num_pre_types[_n_types] = {0,};
+    int num_post_types[_n_types] = {0,};
+    int pre_id_start[_n_types];
+    int post_id_start[_n_types];
+
+    for (int n=0; n<ntk->num_pre; n++){
+        int type=pre_node_types[n];
+        num_pre_types[type] += 1;
+    }
+
+    for (int n=0; n<ntk->num_post; n++){
+        int type=post_node_types[n];
+        num_post_types[type] += 1;
+    }
+
+    for (int i=0; i<_n_types; i++){
+        pre_id_start[i]  = -1;
+        post_id_start[i] = -1;
+    }
+    
+    int pre_type=0;
+    for (int n=0; n<ntk->num_pre; n++){
+        int type=pre_node_types[n];
+        if (pre_id_start[type] == -1){
+            pre_id_start[type] = n;
+        }
+        pre_type=type;
+    }
+
+    for (int n=0; n<ntk->num_post; n++){
+        int type=post_node_types[n];
+        if (post_id_start[type] == -1){
+            post_id_start[type] = n;
+        }
+        pre_type=type;
+    }
+
+    int *used=(int*) calloc(ntk->num_pre * ntk->num_post, sizeof(int));
+
+    for (int i=0; i<_n_types; i++){
+        for (int j=0; j<_n_types; j++){
+            int num_edges=mean_out_deg[i][j]*num_pre_types[i];
+            
+            int n=0;
+            while (n<num_edges){
+                int pre=genrand64_real2()*num_pre_types[i]+pre_id_start[i];
+                int post=genrand64_real2()*num_post_types[j]+post_id_start[j];
+                int id=pre*(ntk->num_post)+post;
+
+                if (used[id] == 0){
+                    append_node(post, ntk->num_edges+pre, ntk->adj_list+pre);
+                    ntk->num_edges[pre]--;
+                    double strength = str_cnt_type[i][j];
+                    append_value(strength, ntk->num_edges+pre, ntk->strength+pre);
+
+                    used[id]=1;
+                    n++;
+                }
+            }
+        }
+    }
+
+    free(used);
+}
+
+
 void gen_bi_random_ntk_with_type(int *pre_node_types, int *post_node_types,
                             double p_cnt_type[_n_types][_n_types],
                             double str_cnt_type[_n_types][_n_types], ntk_t *ntk)
@@ -39,13 +109,12 @@ void gen_bi_random_ntk_with_type(int *pre_node_types, int *post_node_types,
         for (j=0; j<ntk->num_post; j++){
             post_tp = post_node_types[j];
 
-            // printf("%d:%d - %d:%d\n", ntk->num_pre, pre_tp, ntk->num_post, post_tp);
-
             if ((ntk->num_pre == ntk->num_post) && (i == j)){
                 continue;
             }
 
             p = genrand64_real2();
+
             if (p < p_cnt_type[pre_tp][post_tp]){
                 // connection
                 append_node(j, ntk->num_edges+i, ntk->adj_list+i);
