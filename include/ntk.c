@@ -47,13 +47,11 @@ void gen_bi_random_ntk_mean_deg(int *pre_node_types, int *post_node_types,
         post_id_start[i] = -1;
     }
     
-    int pre_type=0;
     for (int n=0; n<ntk->num_pre; n++){
         int type=pre_node_types[n];
         if (pre_id_start[type] == -1){
             pre_id_start[type] = n;
         }
-        pre_type=type;
     }
 
     for (int n=0; n<ntk->num_post; n++){
@@ -61,7 +59,6 @@ void gen_bi_random_ntk_mean_deg(int *pre_node_types, int *post_node_types,
         if (post_id_start[type] == -1){
             post_id_start[type] = n;
         }
-        pre_type=type;
     }
 
     int *used=(int*) calloc(ntk->num_pre * ntk->num_post, sizeof(int));
