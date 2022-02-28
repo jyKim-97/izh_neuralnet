@@ -581,7 +581,7 @@ double *get_fft(int len, double *x_in)
     for (int n=0; n<len/2+1; n++){
         double x_real = x_out_tmp[2*n];
         double x_imag = x_out_tmp[2*n+1];
-        x_out[n] = x_real*x_real + x_imag*x_imag;
+        x_out[n] = sqrt(x_real*x_real + x_imag*x_imag)/len;
 
         if ((n>0)  && (n<len/2)){
             x_out[n] *= 2;
@@ -625,6 +625,7 @@ void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase)
             }
             n0 = n1;
             n1++;
+            n_spk--;
         }
         phase[i] = 2*PI * (i - *n0)/(*n1 - *n0);
     }

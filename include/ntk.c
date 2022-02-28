@@ -65,6 +65,13 @@ void gen_bi_random_ntk_mean_deg(int *pre_node_types, int *post_node_types,
 
     for (int i=0; i<_n_types; i++){
         for (int j=0; j<_n_types; j++){
+
+            if (mean_out_deg[i][j] > num_post_types[j]){
+                printf("mean_out_deg=%d > # post types(%d)=%d, changing num_edges to %d\n",
+                            mean_out_deg[i][j], j, num_post_types[j], num_post_types[j]);
+                mean_out_deg[i][j] = num_post_types[j];
+            }
+
             int num_edges=mean_out_deg[i][j]*num_pre_types[i];
             
             int n=0;
