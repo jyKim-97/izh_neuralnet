@@ -27,6 +27,8 @@ void gen_bi_random_ntk_mean_deg(int *pre_node_types, int *post_node_types,
                             int mean_out_deg[_n_types][_n_types],
                             double str_cnt_type[_n_types][_n_types], ntk_t *ntk)
 {
+    memcpy(ntk->node_types, pre_node_types, ntk->num_pre * sizeof(int));
+
     int num_pre_types[_n_types] = {0,};
     int num_post_types[_n_types] = {0,};
     int pre_id_start[_n_types];
