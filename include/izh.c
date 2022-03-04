@@ -43,13 +43,13 @@ VSLStreamStatePtr rand_stream;
 // 2. Removed _R
 
 double _dt = 0.005; // simulation time step
-const double default_cell_params[4][4]= {
+const double default_cell_params[MAX_TYPE][MAX_TYPE]= {
             {0.02, 0.2, -65, 8},    // RS
             {0.1, 0.2, -65, 2},   // FS
             {0.02, 0.2, -55, 4},    // IB
             {0.02, 0.2, -50, 2}};   // CH
-const double default_syn_veq[4] = {0, -80, 0, 0};
-const double default_syn_tau[4] = {5, 6, 5, 5};
+const double default_syn_veq[MAX_TYPE] = {0, -80, 0, 0};
+const double default_syn_tau[MAX_TYPE] = {5, 6, 5, 5};
 
 
 void init_random_stream(long int seed)
@@ -714,10 +714,10 @@ void free_syns(syn_t *syns)
         free(syns->ptr_r);
     } else if (syns->type == DELAY) {
         free(syns->delay);
-        free(syns->x);
-        free(syns->z);
     } else {
         free(syns->ptr_r);
+        free(syns->x);
+        free(syns->z);
     }
 }
 
@@ -758,7 +758,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
         int tp = bck_types[n];
         bck_syns->p_fire[n] = info->frbck[tp] * _dt / 1000.;
     }
-
+    free(bck_types);
     free_bi_ntk(&ntk_bck);
 }
 
