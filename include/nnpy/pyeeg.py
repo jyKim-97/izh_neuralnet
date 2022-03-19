@@ -98,8 +98,8 @@ def get_fft(x, fs, wbin=None, wbin_t=None):
     return yf, freq
 
 
-def get_stfft(x, t, fs, mbin_t=None, wbin_t=None, f_range=None, buf_size=100):
-    
+def get_stfft(x, t, fs, mbin_t=0.1, wbin_t=1, f_range=None, buf_size=100):
+
     wbin = int(wbin_t * fs)
     mbin = int(mbin_t * fs)
     window = np.hanning(wbin)

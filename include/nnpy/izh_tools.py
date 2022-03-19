@@ -102,10 +102,17 @@ def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s
         x.extend(tspk[n])
         y.extend(n * np.ones(num_fire))
         c.extend(np.tile(colors[cell_types[n]], [num_fire, 1]))
-            
+
+    x = np.array(x)
+    y = np.array(y)
     c = np.array(c)
+
+    if xlim is not None:
+        idx = (x>=xlim[0]) & (x<xlim[1])
+    else:
+        idx = np.ones(len(x), dtype=bool)
         
-    plt.scatter(x, y, s=s, c=c)
+    plt.scatter(x[idx], y[idx], s=s, c=c[idx])
     if xlim is not None:
         plt.xlim(xlim)
     if ylim is None:
