@@ -51,7 +51,7 @@ typedef struct _syn_t
     // depression
     double *x, *z; // x+r+z=1
     double *u;
-    double tau_in, tau_r;
+    double tau_r;
     double U, tau_facil;
 
     double **ptr_vpost;

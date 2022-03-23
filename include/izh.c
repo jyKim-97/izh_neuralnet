@@ -194,6 +194,7 @@ void update_no_delay(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t 
     add_isyn(syns);
 
     update_neurons(cells, nstep);
+    printf("x:%f,y=%f,z=%f\n", syns->x[10], syns->r[10], syns->z[10]);
 }
 
 
@@ -237,6 +238,7 @@ void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns
         add_isyn_delay(syns);
     } else {
         update_syns_no_delay(syns, cells->id_fired);
+        add_isyn(syns);
     }
 
     update_neurons(cells, nstep);
@@ -347,9 +349,9 @@ void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
     if (syns->type_p == STD){
         double *dz = solve_deq_using_euler(f_dz_syns_no_delay, N, syns->z, (void*) syns, NULL);
         cblas_daxpy(N, 1, dz, 1, syns->z, 1);
-        cblas_daxpy(N, 1, dz, 1, dr, 1); // dr = dr + dz, dx = -dr
-        cblas_daxpy(N, -1, dr, 1, syns->x, 1); // dx + dr + dz = 0
-        free(dz);
+        cblas_daxpy(N, 1, dr, 1, dz, 1); // dz = dr + dz, dx = -dr
+        cblas_daxpy(N, -1, dz, 1, syns->x, 1); // dx + dr + dz = 0
+        free_c(dz);
     }
 
     free_c(dr);
@@ -365,9 +367,9 @@ void update_syns_delay(syn_t *syns, neuron_t *cells)
     if (syns->type_p == STD){
         double *dz = solve_deq_using_euler(f_dz_syns_delay, N, syns->z, (void*) syns, NULL);
         cblas_daxpy(N, 1, dz, 1, syns->z, 1);
-        cblas_daxpy(N, 1, dz, 1, dr, 1); // dr = dr + dz, dx = -dr
-        cblas_daxpy(N, -1, dr, 1, syns->x, 1); // dx + dr + dz = 0
-        free(dz);
+        cblas_daxpy(N, 1, dr, 1, dz, 1); // dr = dr + dz, dx = -dr
+        cblas_daxpy(N, -1, dz, 1, syns->x, 1); // dx + dr + dz = 0
+        free_c(dz);
     }
 
     free_c(dr);
@@ -461,8 +463,6 @@ double *f_dz_syns_delay(double *z, void *arg_syn, void *arg_null)
     double *dy = (double*) malloc_c(sz_d * N);
     vdMul(N, syns->inv_tau, syns->r, dy);
     cblas_daxpby(N, _dt, dy, 1, -_dt/syns->tau_r, dz, 1);
-    // cblas_daxpy(N, _dt, dy, 1, )
-    // cblas_daxpy(N, _dt, dy, 1, -_dt/syns->tau_r, dz, 1);
 
     free(dy);
     return dz;
@@ -481,38 +481,11 @@ double *f_dz_syns_no_delay(double *z, void *arg_syn, void *arg_null)
     double *dy = (double*) malloc_c(sz_d * N);
     vdMul(N, syns->inv_tau, syns->r, dy);
 
-    // cblas_dscal(N, -_dt/syns->tau_r, dz, 1);
-    // cblas_daxpy(N, _dt, dy, 1, dz, 1);
-
     cblas_daxpby(N, _dt, dy, 1, -_dt/syns->tau_r, dz, 1);
-    // cblas_daxpby(N, _dt/syns->tau_in, syns->r, 1, -10, dz, 1);
-
-    // for (int n=0; n<3; n++){
-    //     printf("%6.3f-%6.3f-%6.3f,%6.3f, ", dz[n], syns->r[n], syns->z[n], syns->x[n]);
-    // }
-    // printf("\n");
+ 
     free(dy);
 
     return dz;
-}
-
-
-double *f_dr_syns_no_delay_stp(double *r, void *arg_syn, void *arg_fired)
-{
-    syn_t *syns = (syn_t*) arg_syn;
-    double *dr = (double*) malloc_c(sz_d * syns->num_pres);
-
-    memcpy(dr, r, sz_d*syns->num_pres);
-    cblas_dscal(syns->num_pres, -_dt, dr, 1);
-    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
-
-    int *ptr_id = (int*) arg_fired;
-    while (*ptr_id > -1){
-        dr[*ptr_id] += syns->x[*ptr_id]; // dx = deltafn(=_R/_dt) * _dt
-        ptr_id++;
-    }
-    
-    return dr;
 }
 
 
@@ -529,11 +502,12 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
     int *ptr_id = (int*) arg_fired;
     while (*ptr_id > -1){
         if (syns->type_p == STD){
-            // printf("%f\n", syns->x[*ptr_id]);
-            dr[*ptr_id++] += syns->x[*ptr_id]; // dx = deltafn(=1/_dt) * _dt
+            dr[*ptr_id] += syns->x[*ptr_id]; // dx = deltafn(=1/_dt) * _dt
+            // dr[*ptr_id++] += syns->x[*ptr_id]; -> 여기가 에러남 (x를 다음 값을 참조한듯)
         } else {
-            dr[*ptr_id++] += 1; // dx = deltafn(=1/_dt) * _dt
+            dr[*ptr_id] += 1; // dx = deltafn(=1/_dt) * _dt
         }
+        *ptr_id++;
     }
 
     return dr;
@@ -558,6 +532,7 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
         int n_spk=cells->num_spk[id_pre];
         for (int i=n_spk; i>0; i--){
             int dn=nstep-delay-cells->t_fired[id_pre][i-1];
+            // printf("id%d, dn=%d, nstep=%d, delay=%d, t=%d\n", n, dn, nstep, delay, cells->t_fired[n]);
             if (dn > 0){
                 break;
             } else if (dn==0){
