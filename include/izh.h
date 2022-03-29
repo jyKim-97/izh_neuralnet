@@ -18,6 +18,7 @@ typedef enum _PLASTICITY_TYPE {
     STF = 2,
 } PLASTICITY_TYPE;
 
+
 typedef struct _neuron_t
 {
     int num_cells;
@@ -25,8 +26,8 @@ typedef struct _neuron_t
     // izhikevich neuron model parameters
     double *a, *b, *c, *d; 
     // spike info
-    int *num_spk;   
-    int **t_fired; // fired time step for each neurons
+    int *num_spk;  
+    int **t_fired; // fired "time step" for each neurons
     int *id_fired;
     int nstep;
 
@@ -59,6 +60,7 @@ typedef struct _syn_t
     
     // delay parameter
     int *delay;
+    int *id_exp; // explore id, use in delay
     
     // for background synapse
     double *p_fire;
