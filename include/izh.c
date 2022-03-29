@@ -507,20 +507,6 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
                 (*id)++;
             }
         }
-
-        //     int dn=nstep-delay-cells->t_fired[id_pre][i-1];
-        //     // printf("id%d, dn=%d, nstep=%d, delay=%d, t=%d\n", n, dn, nstep, delay, cells->t_fired[n]);
-        //     if (dn > 0){
-        //         break;
-        //     } else if (dn==0){
-        //         if (syns->type_p==STD){
-        //             dr[n] += syns->x[n];
-        //         } else {
-        //             dr[n] += 1;
-        //         }
-        //         break;
-        //     }
-        // }
     }
 
     return dr;
