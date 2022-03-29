@@ -469,11 +469,10 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
     while (*ptr_id > -1){
         if (syns->type_p == STD){
             dr[*ptr_id] += syns->x[*ptr_id]; // dx = deltafn(=1/_dt) * _dt
-            // dr[*ptr_id++] += syns->x[*ptr_id]; -> 여기가 에러남 (x를 다음 값을 참조한듯)
         } else {
             dr[*ptr_id] += 1; // dx = deltafn(=1/_dt) * _dt
         }
-        *ptr_id++;
+        ptr_id++;
     }
 
     return dr;
@@ -757,11 +756,13 @@ void free_syns(syn_t *syns)
     } else {
         if (syns->type == DELAY){
             free(syns->delay);
+            free(syns->id_exp);
         }
-        free(syns->id_exp);
+        if (syns->type_p == STD){
+            free(syns->x);
+            free(syns->z);
+        }
         free(syns->ptr_r);
-        free(syns->x);
-        free(syns->z);
     }
 }
 
