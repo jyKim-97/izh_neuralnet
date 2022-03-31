@@ -463,7 +463,6 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 
     memcpy(dr, r, sz_d*syns->num_pres);
     cblas_dscal(syns->num_pres, -_dt, dr, 1);
-    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
 
     int *ptr_id = (int*) arg_fired;
     while (*ptr_id > -1){
@@ -474,6 +473,8 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
         }
         ptr_id++;
     }
+
+    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
 
     return dr;
 }
@@ -487,7 +488,6 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
 
     memcpy(dr, r, sz_d*syns->num_syns);
     cblas_dscal(syns->num_syns, -_dt, dr, 1);
-    vdMul(syns->num_syns, syns->inv_tau, dr, dr);
 
     int nstep=cells->nstep;
     for (int n=0; n<syns->num_syns; n++){
@@ -507,6 +507,8 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
             }
         }
     }
+
+    vdMul(syns->num_syns, syns->inv_tau, dr, dr);
 
     return dr;
 }
