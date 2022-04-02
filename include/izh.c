@@ -12,7 +12,6 @@
 #include "izh.h"
 
 // set simulation env variable
-
 // #define USE_MKL_MEM
 #define sz_d sizeof(double)
 #define sz_i sizeof(int)
@@ -46,6 +45,13 @@ const double default_cell_params[MAX_TYPE][4]= {
 const double default_syn_veq[MAX_TYPE] = {0, -80, 0, 0};
 const double default_syn_tau[MAX_TYPE] = {5, 6, 5, 5};
 double t_skip_phs = 5; // Using when calculate spike phase, ms
+
+#include <sys/time.h>
+#include <time.h>
+#define CHECKPOINT(tic) clock_gettime(CLOCK_MONOTONIC, &tic)
+#define GET_ELAPSED(tic, toc) (toc.tv_sec - tic.tv_sec) + (toc.tv_nsec - tic.tv_nsec)*1e-9
+double dt_set[10] = {0,};
+struct timespec tic, toc;
 
 
 void init_random_stream(long int seed)
@@ -199,7 +205,6 @@ void update_no_delay(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t 
     add_isyn(syns);
 
     update_neurons(cells, nstep);
-    // printf("x:%f,y=%f,z=%f\n", syns->x[10], syns->r[10], syns->z[10]);
 }
 
 
@@ -228,7 +233,6 @@ void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns
     update_neurons(cells, nstep);
 }
 
-
 void add_isyn_bck(syn_t *syns)
 {
     /*** ic -= weight * r * vpost ***/
@@ -236,7 +240,6 @@ void add_isyn_bck(syn_t *syns)
 
     double *rsyns = (double*) malloc_c(sz_d * N);
     read_ptr(N, rsyns, syns->ptr_r);
-
     double *isyn = (double*) malloc_c(sz_d * N);
     read_ptr(N, isyn, syns->ptr_vpost);
 
@@ -282,7 +285,6 @@ void add_isyn_delay(syn_t *syns)
 
     double *isyn = (double*) malloc_c(sz_d * N);
     read_ptr(N, isyn, syns->ptr_vpost);
-
     cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
     vdMul(N, syns->weight, isyn, isyn);
     vdMul(N, syns->r, isyn, isyn);
@@ -299,6 +301,7 @@ void update_neurons(neuron_t *cells, int nstep)
 {
     int N = cells->num_cells;
     cells->nstep = nstep;
+    
     double *dv = solve_deq_using_rk4(f_dv, N, cells->v, (void*) cells, NULL);
     double *du = solve_deq_using_rk4(f_du, N, cells->u, (void*) cells, NULL);
 
