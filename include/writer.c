@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "writer.h"
 
@@ -49,7 +50,7 @@ void write_result(writer_t *fid_obj, int nstep, neuron_t *cells)
 
 void write_env(writer_t *fid_obj, int num_cells, int num_bck, double tmax, double dt, int *cell_types)
 {
-    char fname[1000];
+    char fname[200];
     sprintf(fname, "%s_env.txt", fid_obj->tag);
     FILE *fp = fopen(fname, "w");
 

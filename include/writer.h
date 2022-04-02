@@ -8,7 +8,8 @@ typedef enum _WRITER_VAR
     V_ONLY = 1,
     U_ONLY = 2,
     I_ONLY = 4,
-    SPK_ONLY = 8
+    SPK_ONLY = 8,
+    SPK_DAT = 16
 } WRITER_VAR;
 
 
