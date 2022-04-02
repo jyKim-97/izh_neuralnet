@@ -153,6 +153,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
 void free_info(network_info_t *info);
 int *gen_types(int num, double *ratio);
 
+void export_ntk(syn_t *syns, char fname[]);
 void export_env(char tag[], network_info_t *info, int num_add, ...);
 void write_array_d(JSON_Object *root_obj, char arr_name[], double arr1d[], int narr);
 void write_array_i(JSON_Object *root_obj, char arr_name[], int arr1d[], int narr);

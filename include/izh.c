@@ -261,23 +261,49 @@ void add_isyn(syn_t *syns)
 {
     /*** ic -= weight * r * (vpost - veq) ***/
     int N = syns->num_syns;
-
-    double *rsyns = (double*) malloc_c(sz_d * N);
-    read_ptr(N, rsyns, syns->ptr_r);
-
     double *isyn = (double*) malloc_c(sz_d * N);
     read_ptr(N, isyn, syns->ptr_vpost);
     cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
+
     vdMul(N, syns->weight, isyn, isyn);
-    vdMul(N, rsyns, isyn, isyn);
+    if (syns->type == DELAY){
+        double *rsyns = (double*) malloc_c(sz_d * N);
+        read_ptr(N, rsyns, syns->ptr_r);
+        vdMul(N, rsyns, isyn, isyn);
+        free_c(rsyns);
+    } else if (syns->type == NO_DELAY) {
+        vdMul(N, syns->r, isyn, isyn);
+    } else {
+        printf("Wrong type\n");
+    }
 
     for (int n=0; n<N; n++){
-        *(syns->ptr_ipost[n]) -= isyn[n];
+        *(syns->ptr_ipost)[n] -= isyn[n];
     }
 
     free_c(isyn);
-    free_c(rsyns);
 }
+// void add_isyn(syn_t *syns)
+// {
+//     /*** ic -= weight * r * (vpost - veq) ***/
+//     int N = syns->num_syns;
+
+//     double *rsyns = (double*) malloc_c(sz_d * N);
+//     read_ptr(N, rsyns, syns->ptr_r);
+
+//     double *isyn = (double*) malloc_c(sz_d * N);
+//     read_ptr(N, isyn, syns->ptr_vpost);
+//     cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
+//     vdMul(N, syns->weight, isyn, isyn);
+//     vdMul(N, rsyns, isyn, isyn);
+
+//     for (int n=0; n<N; n++){
+//         *(syns->ptr_ipost[n]) -= isyn[n];
+//     }
+
+//     free_c(isyn);
+//     free_c(rsyns);
+// }
 
 
 void add_isyn_delay(syn_t *syns)
@@ -791,7 +817,8 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     info->cell_types = gen_types(info->num_cells, info->cell_type_ratio);
     init_cell_vars(cells, info->num_cells, info->cell_params, info->cell_types);
 
-    ntk_t ntk_syn, ntk_bck;
+    ntk_t ntk_syn;
+    SYN_TYPE type;
     syns->type_p = info->type_p;
     init_bi_ntk(info->num_cells, info->num_cells, &ntk_syn);
     if (info->type_ntk == MEAN_DEG){
@@ -799,8 +826,6 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     } else if (info->type_ntk == PROB) {
         gen_bi_random_ntk_with_type(info->cell_types, info->cell_types, info->psyns, info->gsyns, &ntk_syn);
     }
-    
-    SYN_TYPE type;
     if ((info->t_delay_m == 0) && (info->t_delay_std == 0)){
         type = NO_DELAY;
     } else {
@@ -814,6 +839,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
         }
     }
 
+    ntk_t ntk_bck;
     int *bck_types = gen_types(info->num_bck, info->bck_type_ratio);
     init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck);
     gen_bi_random_ntk_with_type(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
@@ -897,6 +923,16 @@ void export_env(char tag[], network_info_t *info, int num_add, ...){
 
     json_serialize_to_file_pretty(root_value, fname);
     json_value_free(root_value);
+}
+
+
+void export_ntk(syn_t *syns, char fname[])
+{
+    FILE *fp = fopen(fname, "w");
+    for (int n=0; n<syns->num_syns; n++){
+        fprintf(fp, "%d,%d,%d,%f,%f\n", n, syns->id_pre_neuron[n], syns->id_post_neuron[n], syns->weight[n], syns->veq[n]);
+    }
+    fclose(fp);
 }
 
 
