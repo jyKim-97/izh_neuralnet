@@ -38,12 +38,26 @@ class IzhReader:
         exec("self.%s = x"%(varname))
         
     def read_tspk(self):
-        self.t_spks = read_tspk(f"{self.tag}_ft_spk.txt", self.num_cells, self.ts)
+        self.t_spks = read_tspk(f"{self.tag}_ft_spk", self.num_cells, self.ts)
+        self.num_spks = [len(t) for t in self.t_spks]
+
+    def read_tspk_dat(self):
+        with open(self.tag+"_ft_spk.info", "r") as fp:
+            self.num_spks = [int(n) for n in fp.readline().split(",")[:-1]]
+        
+        with open(self.tag+"_ft_spk.dat", "rb") as fp:
+            t_spks_flat = np.fromfile(fp, dtype=int)*self.dt
+        # align t_spks
+        n0 = 0
+        self.t_spks = []
+        for n in range(self.num_cells):
+            self.t_spks.append(t_spks_flat[n0:n0+self.num_spks[n]])
+            n0 += self.num_spks[n]
 
 
 def read_tspk(fname, N, ts):
     t_spks = [[] for i in range(N)]
-    with open(fname, "r") as fid:
+    with open(fname+".txt", "r") as fid:
         line = fid.readline() 
     data = line.split(",")[:-1]
     for pair in data:
