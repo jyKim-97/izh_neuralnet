@@ -118,6 +118,40 @@ void write_spike(FILE *fp, int nstep, int *t_spk)
 }
 
 
+void write_spike_dat(writer_t *fid_obj, neuron_t *cells)
+{
+    int N = cells->num_cells;
+
+    char fname[100];
+    sprintf(fname, "%s_ft_spk.info", fid_obj->tag);
+    FILE *fp = fopen(fname, "w");
+
+    int len=0;
+    for (int n=0; n<N; n++){
+        len += cells->num_spk[n];
+        fprintf(fp, "%d,", cells->num_spk[n]);
+    }
+    fclose(fp);
+
+    int id=0;
+    int *t_spk_flat = (int*) malloc(sizeof(int) * len);
+    for (int n=0; n<N; n++){
+        int num = cells->num_spk[n];
+        int *t_fired = cells->t_fired[n];
+        for (int i=0; i<num; i++){
+            t_spk_flat[id++] = t_fired[i];
+        }
+    }
+
+    sprintf(fname, "%s_ft_spk.dat", fid_obj->tag);
+    fp = fopen(fname, "wb");
+    fwrite(t_spk_flat, sizeof(int), len, fp);
+    fclose(fp);
+
+    free(t_spk_flat);
+}
+
+
 void end_writer(writer_t *fid_obj)
 {
     int mod = fid_obj->mod;
