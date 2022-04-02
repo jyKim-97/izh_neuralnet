@@ -266,12 +266,12 @@ void add_isyn(syn_t *syns)
     cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
 
     vdMul(N, syns->weight, isyn, isyn);
-    if (syns->type == DELAY){
+    if (syns->type == NO_DELAY){
         double *rsyns = (double*) malloc_c(sz_d * N);
         read_ptr(N, rsyns, syns->ptr_r);
         vdMul(N, rsyns, isyn, isyn);
         free_c(rsyns);
-    } else if (syns->type == NO_DELAY) {
+    } else if (syns->type == DELAY) {
         vdMul(N, syns->r, isyn, isyn);
     } else {
         printf("Wrong type\n");
