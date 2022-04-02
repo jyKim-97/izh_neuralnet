@@ -46,7 +46,7 @@ class IzhReader:
             self.num_spks = [int(n) for n in fp.readline().split(",")[:-1]]
         
         with open(self.tag+"_ft_spk.dat", "rb") as fp:
-            t_spks_flat = np.fromfile(fp, dtype=int)*self.dt
+            t_spks_flat = np.fromfile(fp, dtype=np.int32)*self.dt
         # align t_spks
         n0 = 0
         self.t_spks = []
