@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include <complex.h>
+#include <stdarg.h>
 #include <omp.h>
 
 #include "mkl.h"
@@ -232,6 +233,7 @@ void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns
 
     update_neurons(cells, nstep);
 }
+
 
 void add_isyn_bck(syn_t *syns)
 {
@@ -787,63 +789,48 @@ void destroy_mkl_buffers()
 void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns)
 {
     info->cell_types = gen_types(info->num_cells, info->cell_type_ratio);
-
     init_cell_vars(cells, info->num_cells, info->cell_params, info->cell_types);
-    
-    // init synapse
-    init_bi_ntk(info->num_cells, info->num_cells, &info->ntk_syns);
-    gen_bi_random_ntk_with_type(info->cell_types, info->cell_types, info->psyns, info->gsyns, &info->ntk_syns);
-    init_syn_vars(syns, info->num_cells, NO_DELAY, &info->ntk_syns,
-                        info->syn_veq, info->syn_tau, cells->v, cells->ic);
 
-    // int nn = info->ntk_syns.num_edges
-    // printf("w_end = %d-%d-%f\n", (info->ntk_syns).
+    ntk_t ntk_syn, ntk_bck;
+    syns->type_p = info->type_p;
+    init_bi_ntk(info->num_cells, info->num_cells, &ntk_syn);
+    if (info->type_ntk == MEAN_DEG){
+        gen_bi_random_ntk_mean_deg(info->cell_types, info->cell_types, info->mean_degs, info->gsyns, &ntk_syn);
+    } else if (info->type_ntk == PROB) {
+        gen_bi_random_ntk_with_type(info->cell_types, info->cell_types, info->psyns, info->gsyns, &ntk_syn);
+    }
     
+    SYN_TYPE type;
+    if ((info->t_delay_m == 0) && (info->t_delay_std == 0)){
+        type = NO_DELAY;
+    } else {
+        type = DELAY;
+    }
+    init_syn_vars(syns, info->num_cells, type, &ntk_syn,
+                        info->syn_veq, info->syn_tau, cells->v, cells->ic);
+    if (type == DELAY){
+        for (int n=0; n<syns->num_syns; n++){
+            syns->delay[n] = genrand64_normal(info->t_delay_m, info->t_delay_std)/_dt;
+        }
+    }
+
     int *bck_types = gen_types(info->num_bck, info->bck_type_ratio);
-    ntk_t ntk_bck;
     init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck);
-    gen_bi_random_ntk_fixed_indeg(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
+    gen_bi_random_ntk_with_type(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
     init_syn_vars(bck_syns, info->num_bck, BACKGROUND, &ntk_bck, info->bck_veq, info->bck_tau, cells->v, cells->ic);
     for (int n=0; n<info->num_bck; n++){
         int tp = bck_types[n];
         bck_syns->p_fire[n] = info->frbck[tp] * _dt / 1000.;
     }
+
     free(bck_types);
+    free_bi_ntk(&ntk_syn);
     free_bi_ntk(&ntk_bck);
 }
 
 
-void init_info(network_info_t *info)
-{
-    for (int i=0; i<MAX_TYPE; i++){
-        info->cell_type_ratio[i] = 0;
-        info->bck_type_ratio[i] = 0;
-
-        info->syn_tau[i] = 0;
-        info->syn_veq[i] = 0;
-        info->bck_tau[i] = 0;
-        info->bck_veq[i] = 0;
-
-        info->frbck[i] = 0;
-
-        for (int j=0; j<MAX_TYPE; j++){
-            info->psyns[i][j] = 0;
-            info->gsyns[i][j] = 0;
-            info->pbck[i][j] = 0;
-            info->gbck[i][j] = 0;
-        }
-
-        for (int j=0; j<4; j++){
-            info->cell_params[i][j] = 0;
-        }
-    }
-}
-
-
-void free_info(network_info_t *info)
-{
+void free_info(network_info_t *info){
     free(info->cell_types);
-    free_bi_ntk(&info->ntk_syns);
 }
 
 
@@ -858,14 +845,76 @@ int *gen_types(int num, double *ratio)
         if (n-n_type_init >= (double) num*ratio[n_type]){
             n_type ++;
             n_type_init = n;
-        }
-        
+        }   
         if (n_type >= MAX_TYPE){
             printf("wrong type selectd\n");
         }
-
         types[n] = n_type;
     }
-
     return types;
+}
+
+
+void export_env(char tag[], network_info_t *info, int num_add, ...){
+    char fname[200];
+    sprintf(fname, "%s_env.json", tag);
+
+    JSON_Value *root_value;
+    JSON_Object *root_obj;
+
+    root_value = json_value_init_object();
+    root_obj = json_value_get_object(root_value);
+
+    json_object_set_number(root_obj, "num_cells", info->num_cells);
+    write_array_d(root_obj, "cell_type_ratio", info->cell_type_ratio, 2);
+    write_array_i(root_obj, "mean_degs, e->", info->mean_degs[0], 2);
+    write_array_i(root_obj, "mean_degs, i->", info->mean_degs[1], 2);
+    write_array_d(root_obj, "g_syn, e->", info->gsyns[0], 2);
+    write_array_d(root_obj, "g_syn, i->", info->gsyns[1], 2);
+
+    write_array_d(root_obj, "g_syn, i->", info->gsyns[1], 2);
+    write_array_d(root_obj, "g_syn, i->", info->gsyns[1], 2);
+    
+    json_object_set_number(root_obj, "num_bck", info->num_bck);
+    json_object_set_number(root_obj, "fr_bck", info->frbck[0]);
+    write_array_d(root_obj, "p_bck", info->pbck[0], 2);
+    write_array_d(root_obj, "g_bck", info->gbck[0], 2);
+    json_object_set_number(root_obj, "dt", _dt);
+
+    json_object_set_number(root_obj, "t_delay_m", info->t_delay_m);
+    json_object_set_number(root_obj, "t_delay_s", info->t_delay_std);
+
+    // read additional parameters
+    va_list ap;
+    va_start(ap, num_add);
+    for (int n=num_add; n>0; n--)
+    {
+        char *var_name = va_arg(ap, char*);
+        double var = va_arg(ap, double);
+        json_object_set_number(root_obj, var_name, var);
+    }
+    va_end(ap);
+
+    json_serialize_to_file_pretty(root_value, fname);
+    json_value_free(root_value);
+}
+
+
+void write_array_d(JSON_Object *root_obj, char arr_name[], double arr1d[], int narr)
+{
+    json_object_set_value(root_obj, arr_name, json_value_init_array());
+    JSON_Array *arr = json_object_get_array(root_obj, arr_name);
+    for (int n=0; n<narr; n++){
+        json_array_append_number(arr, arr1d[n]);
+    }
+}
+
+
+void write_array_i(JSON_Object *root_obj, char arr_name[], int arr1d[], int narr)
+{
+    json_object_set_value(root_obj, arr_name, json_value_init_array());
+    JSON_Array *arr = json_object_get_array(root_obj, arr_name);
+    for (int n=0; n<narr; n++){
+        json_array_append_number(arr, arr1d[n]);
+    }
 }

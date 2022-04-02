@@ -2,6 +2,7 @@
 #define IZH
 
 #include "ntk.h"
+#include "parson.h"
 #define MAX_TYPE 6
 
 extern double _dt;
@@ -14,9 +15,16 @@ typedef enum _SYN_TYPE {
 
 
 typedef enum _PLASTICITY_TYPE {
-    STD = 1,
-    STF = 2,
+    NONE = 0,
+    STD,
+    STF,
 } PLASTICITY_TYPE;
+
+
+typedef enum _NET_TYPE {
+    MEAN_DEG = 0,
+    PROB
+} NET_TYPE;
 
 
 typedef struct _neuron_t
@@ -73,7 +81,8 @@ typedef struct _network_info_t
     int num_cells;
     double cell_type_ratio[MAX_TYPE];
     double cell_params[MAX_TYPE][4]; // num_types * 4 or NULL
-    // synapse
+
+    int mean_degs[MAX_TYPE][MAX_TYPE];
     double psyns[MAX_TYPE][MAX_TYPE]; // pre (row) / post (col)
     double gsyns[MAX_TYPE][MAX_TYPE];
     double syn_tau[MAX_TYPE]; // num_types
@@ -87,9 +96,11 @@ typedef struct _network_info_t
     double bck_tau[MAX_TYPE];
     double bck_veq[MAX_TYPE];
     double frbck[MAX_TYPE]; // size = num_bck_types
-
     int *cell_types;
-    ntk_t ntk_syns;
+
+    double t_delay_m, t_delay_std;
+    PLASTICITY_TYPE type_p;
+    NET_TYPE type_ntk;
 
 } network_info_t;
 
@@ -139,8 +150,11 @@ void free_rand_stream();
 void destroy_mkl_buffers();
 
 void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
-void init_info(network_info_t *info);
 void free_info(network_info_t *info);
 int *gen_types(int num, double *ratio);
+
+void export_env(char tag[], network_info_t *info, int num_add, ...);
+void write_array_d(JSON_Object *root_obj, char arr_name[], double arr1d[], int narr);
+void write_array_i(JSON_Object *root_obj, char arr_name[], int arr1d[], int narr);
 
 #endif
