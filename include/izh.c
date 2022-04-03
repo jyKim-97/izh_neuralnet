@@ -843,6 +843,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     int *bck_types = gen_types(info->num_bck, info->bck_type_ratio);
     init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck);
     gen_bi_random_ntk_with_type(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
+    // gen_bi_random_ntk_fixed_indeg(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
     init_syn_vars(bck_syns, info->num_bck, BACKGROUND, &ntk_bck, info->bck_veq, info->bck_tau, cells->v, cells->ic);
     for (int n=0; n<info->num_bck; n++){
         int tp = bck_types[n];
