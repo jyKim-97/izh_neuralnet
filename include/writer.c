@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "writer.h"
 
@@ -49,7 +50,7 @@ void write_result(writer_t *fid_obj, int nstep, neuron_t *cells)
 
 void write_env(writer_t *fid_obj, int num_cells, int num_bck, double tmax, double dt, int *cell_types)
 {
-    char fname[1000];
+    char fname[200];
     sprintf(fname, "%s_env.txt", fid_obj->tag);
     FILE *fp = fopen(fname, "w");
 
@@ -115,6 +116,40 @@ void write_spike(FILE *fp, int nstep, int *t_spk)
     while (*ptr_t > -1){
         fprintf(fp, "%d-%d,", nstep, *ptr_t++);        
     }
+}
+
+
+void write_spike_dat(writer_t *fid_obj, neuron_t *cells)
+{
+    int N = cells->num_cells;
+
+    char fname[100];
+    sprintf(fname, "%s_ft_spk.info", fid_obj->tag);
+    FILE *fp = fopen(fname, "w");
+
+    int len=0;
+    for (int n=0; n<N; n++){
+        len += cells->num_spk[n];
+        fprintf(fp, "%d,", cells->num_spk[n]);
+    }
+    fclose(fp);
+
+    int id=0;
+    int *t_spk_flat = (int*) malloc(sizeof(int) * len);
+    for (int n=0; n<N; n++){
+        int num = cells->num_spk[n];
+        int *t_fired = cells->t_fired[n];
+        for (int i=0; i<num; i++){
+            t_spk_flat[id++] = t_fired[i];
+        }
+    }
+
+    sprintf(fname, "%s_ft_spk.dat", fid_obj->tag);
+    fp = fopen(fname, "wb");
+    fwrite(t_spk_flat, sizeof(int), len, fp);
+    fclose(fp);
+
+    free(t_spk_flat);
 }
 
 

@@ -60,6 +60,18 @@ double get_dt(struct timeval tic, struct timeval toc)
 }
 
 
+double get_dt_clock(struct timespec tic, struct timespec toc)
+{
+    long sec, nsec;
+
+    sec = toc.tv_sec - tic.tv_sec;
+    nsec = (toc.tv_nsec - tic.tv_nsec);
+
+    double dt = sec + ((double) nsec) * 1e-9;
+    return dt;
+}
+
+
 void print_elapsed(struct timeval start_t)
 {
     int sec, msec, usec, x;
