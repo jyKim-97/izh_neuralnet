@@ -31,6 +31,25 @@ void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
 }
 
 
+void write_summary(char tag[], res_t *simul_result)
+{
+    char fname[150];
+    sprintf(fname, "%s_summary.info", tag);
+    FILE *fp = fopen(fname, "w");
+    fprintf(fp, "num_times=%d,num_freqs=%d", simul_result->num_times, simul_result->num_freqs);
+    fclose(fp);
+
+    sprintf(fname, "%s_summary.dat", tag);
+    FILE *fp2 = fopen(fname, "wb");
+    fwrite(simul_result->t, sizeof(double), simul_result->num_times, fp2);
+    fwrite(simul_result->vm, sizeof(double), simul_result->num_times, fp2);
+    fwrite(simul_result->rk, sizeof(double), simul_result->num_times, fp2);
+    fwrite(simul_result->freq, sizeof(double), simul_result->num_freqs, fp2);
+    fwrite(simul_result->yf, sizeof(double), simul_result->num_freqs, fp2);
+    fclose(fp2);
+}
+
+
 void write_result(writer_t *fid_obj, int nstep, neuron_t *cells)
 {
     int num_cells = cells->num_cells;
@@ -64,7 +83,7 @@ FILE *open_file(char fname[], char *type)
     FILE *fid = fopen(fname, type);
     if (fid == NULL){
         // printf();
-        char err_msg[50];
+        char err_msg[150];
         sprintf(err_msg, "File %s is not openned", fname);
         perror(err_msg);
     }
@@ -131,9 +150,9 @@ void write_spike_dat(writer_t *fid_obj, neuron_t *cells)
 }
 
 
-void write_env(writer_t *fp_obj, network_info_t *info, int num_add, ...){
+void write_env(char tag[], network_info_t *info, int num_add, ...){
     char fname[200];
-    sprintf(fname, "%s_env.json", fp_obj->tag);
+    sprintf(fname, "%s_env.json", tag);
 
     JSON_Value *root_value;
     JSON_Object *root_obj;
@@ -155,10 +174,14 @@ void write_env(writer_t *fp_obj, network_info_t *info, int num_add, ...){
     json_object_set_number(root_obj, "fr_bck", info->frbck[0]);
     write_array_d(root_obj, "p_bck", info->pbck[0], 2);
     write_array_d(root_obj, "g_bck", info->gbck[0], 2);
-    json_object_set_number(root_obj, "dt", _dt);
 
+    json_object_set_number(root_obj, "dt", _dt);
+    json_object_set_number(root_obj, "tmax", info->tmax);
+    json_object_set_number(root_obj, "fs", info->fs);
     json_object_set_number(root_obj, "t_delay_m", info->t_delay_m);
     json_object_set_number(root_obj, "t_delay_s", info->t_delay_std);
+    json_object_set_number(root_obj, "plasticity", info->type_p);
+    json_object_set_number(root_obj, "bck_network_type", info->type_ntk);
 
     // read additional parameters
     va_list ap;
