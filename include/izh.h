@@ -38,6 +38,7 @@ typedef struct _neuron_t
     int **t_fired; // fired "time step" for each neurons
     int *id_fired;
     int nstep;
+    int *types; // cell types
 
 } neuron_t;
 
@@ -96,7 +97,6 @@ typedef struct _network_info_t
     double bck_tau[MAX_TYPE];
     double bck_veq[MAX_TYPE];
     double frbck[MAX_TYPE]; // size = num_bck_types
-    int *cell_types;
 
     double t_delay_m, t_delay_std;
     PLASTICITY_TYPE type_p;
@@ -150,7 +150,6 @@ void free_rand_stream();
 void destroy_mkl_buffers();
 
 void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
-void free_info(network_info_t *info);
 int *gen_types(int num, double *ratio);
 
 void export_ntk(syn_t *syns, char fname[]);

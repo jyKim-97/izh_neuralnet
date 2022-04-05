@@ -95,6 +95,9 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int
         cells->t_fired[n][0] = -1;
         cells->id_fired[n] = -1;
     }
+
+    cells->types = (int*) malloc(sizeof(double) * num_cells);
+    memcpy(cells->types, cell_types, sizeof(double) * num_cells);
 }
 
 
@@ -283,27 +286,6 @@ void add_isyn(syn_t *syns)
 
     free_c(isyn);
 }
-// void add_isyn(syn_t *syns)
-// {
-//     /*** ic -= weight * r * (vpost - veq) ***/
-//     int N = syns->num_syns;
-
-//     double *rsyns = (double*) malloc_c(sz_d * N);
-//     read_ptr(N, rsyns, syns->ptr_r);
-
-//     double *isyn = (double*) malloc_c(sz_d * N);
-//     read_ptr(N, isyn, syns->ptr_vpost);
-//     cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
-//     vdMul(N, syns->weight, isyn, isyn);
-//     vdMul(N, rsyns, isyn, isyn);
-
-//     for (int n=0; n<N; n++){
-//         *(syns->ptr_ipost[n]) -= isyn[n];
-//     }
-
-//     free_c(isyn);
-//     free_c(rsyns);
-// }
 
 
 void add_isyn_delay(syn_t *syns)
@@ -768,6 +750,7 @@ void free_neurons(neuron_t *cells)
         free(cells->t_fired[n]);
     }
     free(cells->t_fired);
+    free(cells->types);
 }
 
 
@@ -814,17 +797,17 @@ void destroy_mkl_buffers()
 
 void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns)
 {
-    info->cell_types = gen_types(info->num_cells, info->cell_type_ratio);
-    init_cell_vars(cells, info->num_cells, info->cell_params, info->cell_types);
+    int *cell_types = gen_types(info->num_cells, info->cell_type_ratio);
+    init_cell_vars(cells, info->num_cells, info->cell_params, cell_types);
 
     ntk_t ntk_syn;
     SYN_TYPE type;
     syns->type_p = info->type_p;
     init_bi_ntk(info->num_cells, info->num_cells, &ntk_syn);
     if (info->type_ntk == MEAN_DEG){
-        gen_bi_random_ntk_mean_deg(info->cell_types, info->cell_types, info->mean_degs, info->gsyns, &ntk_syn);
+        gen_bi_random_ntk_mean_deg(cell_types, cell_types, info->mean_degs, info->gsyns, &ntk_syn);
     } else if (info->type_ntk == PROB) {
-        gen_bi_random_ntk_with_type(info->cell_types, info->cell_types, info->psyns, info->gsyns, &ntk_syn);
+        gen_bi_random_ntk_with_type(cell_types, cell_types, info->psyns, info->gsyns, &ntk_syn);
     }
     if ((info->t_delay_m == 0) && (info->t_delay_std == 0)){
         type = NO_DELAY;
@@ -842,7 +825,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     ntk_t ntk_bck;
     int *bck_types = gen_types(info->num_bck, info->bck_type_ratio);
     init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck);
-    gen_bi_random_ntk_with_type(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
+    gen_bi_random_ntk_with_type(bck_types, cell_types, info->pbck, info->gbck, &ntk_bck);
     // gen_bi_random_ntk_fixed_indeg(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
     init_syn_vars(bck_syns, info->num_bck, BACKGROUND, &ntk_bck, info->bck_veq, info->bck_tau, cells->v, cells->ic);
     for (int n=0; n<info->num_bck; n++){
@@ -853,11 +836,6 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     free(bck_types);
     free_bi_ntk(&ntk_syn);
     free_bi_ntk(&ntk_bck);
-}
-
-
-void free_info(network_info_t *info){
-    free(info->cell_types);
 }
 
 
