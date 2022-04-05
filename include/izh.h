@@ -120,7 +120,7 @@ typedef struct _arg_t {
 
 
 void init_random_stream(long int seed);
-void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int *cell_types);
+void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE][4], int *cell_types);
 void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double cell_veq[], double cell_tau[], double *vpost, double *ipost);
 
 void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
