@@ -88,7 +88,23 @@ class IzhReader:
             n0 += self.num_spks[n]
 
     def read_summary(self):
-        pass
+        fname = self.tag+"_summary"
+        if not os.path.isfile(fname+".info"):
+            print("There is no summary file")
+            return
+
+        with open(fname+".info", "r") as f:
+            vals = f.readline().split(",")
+        nt = int(vals[0].split("=")[1])
+        nf  = int(vals[1].split("=")[1])
+
+        with open(fname+".dat", "rb") as f:
+            data = np.fromfile(f, dtype=np.double)
+        self.ts_s = data[:nt]
+        self.vm = data[nt:2*nt]
+        self.rk = data[2*nt:3*nt]
+        self.freq = data[3*nt:3*nt+nf]
+        self.yf = data[3*nt+nf:3*nt+2*nf]
 
 
 def read_byte_data(fname, N):
@@ -112,6 +128,18 @@ def get_raster_plot(t_spks, cell_types):
             cs.append(cell_colors[ctp])
     
     return ts, id_spks, cs
+
+
+def get_spike_hist(obj, tbin=5):
+    num_exc = int(obj.num_cells * 0.8)
+    edges = np.arange(0, obj.ts[-1]+tbin/2, tbin)
+    t_spks_vec = np.zeros(len(edges)-1)
+    for n in range(num_exc):
+        bins, _ = np.histogram(obj.t_spks[n], edges)
+        bins[bins > 0] = 1
+        t_spks_vec += bins
+    t_hist = (edges[1:] + edges[:-1])/2
+    return t_spks_vec/num_exc, t_hist
 
 
 def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s=1):
@@ -153,29 +181,22 @@ def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s
     return x, y, c
 
 
-def draw_single_summary(tag, xlim=None, flim=(5,105), clim=None, vlim=None, title=None, xplim=None, ha='center'):
+def draw_single_summary(obj, xlim=None, flim=(5,105), clim=None, vlim=None, title=None, xplim=None, ha='center'):
     
     from matplotlib.patches import Rectangle
+    import nnpy.pyeeg as pyeeg
 
     def set_axes(xt=()):
         plt.xticks(xt, fontsize=8)
         plt.yticks(fontsize=8)
     
-    obj = it.IzhReader(tag)
-    if os.path.isfile(tag+"_ft_spk.info"):
-        obj.read_tspk_dat()
-    else:
-         obj.read_tspk()
-    
     spk_hist, t_hist = get_spike_hist(obj, tbin=5)
-    
-    obj.rk, obj.vm, obj.f, obj.yf = read_summary(obj.tag)
-    nskip = len(obj.ts)//len(obj.rk)
-    obj.ts_d = obj.ts[::nskip]
-    psd, fpsd, tpsd = pyeeg.get_stfft(obj.vm, obj.ts_d, 2000, wbin_t=0.5, mbin_t=0.01, f_range=(4, 200))
+    psd, fpsd, tpsd = pyeeg.get_stfft(obj.vm, obj.ts_s, 2000, wbin_t=0.5, mbin_t=0.01, f_range=(4, 200))
 
     ax1 = plt.axes((0.1, 0.65, 0.6, 0.2))
-    it.draw_raster_plot(obj.t_spks, cell_types=obj.cell_types, xlim=xlim)
+    if xlim is None: xlim = (0, obj.tmax)
+
+    draw_raster_plot(obj.t_spks, cell_types=obj.cell_types, xlim=xlim)
     plt.xlabel("")
     plt.xlim(xlim)
     plt.ylim([-30, obj.num_cells+30])
@@ -185,20 +206,22 @@ def draw_single_summary(tag, xlim=None, flim=(5,105), clim=None, vlim=None, titl
     plt.plot(t_hist, spk_hist, 'k', lw=1)
     set_axes(np.arange(xlim[0], xlim[1]+1, 100))
     plt.ylim([-0.1, 1.1])
-    plt.ylabel(r"$p_{fire}$")
+    plt.ylabel(r"$p_{e,fire}$")
     
+    if vlim is None: vlim = (-30, 80)
+    if xplim is None: xplim = (0, obj.tmax)
     rect_args = [[xlim[0], vlim[0]], xlim[1]-xlim[0], vlim[1]-vlim[0]]
     rect_kwargs = {"edgecolor": "k", "facecolor": "k", "fill":True, "alpha": 0.2, "linewidth":1}
     
     xt = np.arange(xplim[0], xplim[1]+1, 2000)
     ax2 = plt.axes((0.1, 0.35, 0.6, 0.22))
-    plt.plot(obj.ts_d, np.array(obj.vm), 'k', lw=1)
+    plt.plot(obj.ts_s, np.array(obj.vm), 'k', lw=1)
     plt.xlim(xplim)
     plt.ylim(vlim)
     set_axes()
     plt.ylabel(r"$\langle v \rangle$", fontsize=10)
     ax = plt.twinx()
-    plt.plot(obj.ts_d, obj.rk, 'r', lw=1)
+    plt.plot(obj.ts_s, obj.rk, 'r', lw=1)
     plt.ylabel(r"$r_{k}$")
     plt.ylim([-0.1, 1.1])
     ax.spines["right"].set_color("r")
@@ -233,9 +256,9 @@ def draw_single_summary(tag, xlim=None, flim=(5,105), clim=None, vlim=None, titl
     yl = obj.yf[nf]
     yl = [-0.05*yl, 1.2*yl]
     
-    plt.plot(obj.f, obj.yf, 'k', lw=1)
-    plt.plot(obj.f[nf], 1.02*obj.yf[nf], 'rv', markersize=5)
-    plt.text(obj.f[nf], 1.06*obj.yf[nf], r"$%d$ Hz"%(obj.f[nf]), fontsize=8, ha=ha)
+    plt.plot(obj.freq, obj.yf, 'k', lw=1)
+    plt.plot(obj.freq[nf], 1.02*obj.yf[nf], 'rv', markersize=5)
+    plt.text(obj.freq[nf], 1.06*obj.yf[nf], r"$%d$ Hz"%(obj.freq[nf]), fontsize=8, ha=ha)
     plt.xticks(yt, fontsize=8)
     plt.xlim(flim)
     plt.ylim(yl)
@@ -246,7 +269,5 @@ def draw_single_summary(tag, xlim=None, flim=(5,105), clim=None, vlim=None, titl
     plt.ylabel("fft result from %d~%ds"%(tw), fontsize=10)
     
     if title is None:
-        title = tag
+        title = obj.tag
     plt.suptitle(title)
-
-    return obj
