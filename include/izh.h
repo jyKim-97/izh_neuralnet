@@ -74,8 +74,7 @@ typedef struct _syn_t {
 } syn_t;
 
 
-typedef struct _network_info_t
-{
+typedef struct _network_info_t {
     int num_cells;
     double cell_type_ratio[MAX_TYPE];
     double cell_params[MAX_TYPE][4]; // num_types * 4 or NULL
@@ -95,11 +94,29 @@ typedef struct _network_info_t
     double bck_veq[MAX_TYPE];
     double frbck[MAX_TYPE]; // size = num_bck_types
 
+    double tmax;
+    double fs; // sampling rate
     double t_delay_m, t_delay_std;
     PLASTICITY_TYPE type_p;
     NET_TYPE type_ntk;
 
 } network_info_t;
+
+
+typedef struct _result_t {
+    double fs; // sampling rate
+    int num_times;
+    double *t, *vm, *rk;
+    int num_freqs;
+    double *freq, *yf;
+} res_t;
+
+
+typedef struct _arg_t {
+    double *x, *y;
+    int len;
+    int message;
+} arg_t;
 
 
 void init_random_stream(long int seed);
@@ -136,7 +153,11 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
 void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase);
 double *get_fft(int len, double *x_in);
 double *get_fft_freq(int len, double fs);
+void get_fft_summary(double *vm, double t_range[2], arg_t *fft_res);
+void downsampling(int len, double *y_org, double fs, arg_t *new_vars);
+void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t *summary);
 
+void free_summary(res_t *summary);
 void free_neurons(neuron_t *cells);
 void free_syns(syn_t *syns);
 void free_rand_stream();
@@ -144,5 +165,6 @@ void destroy_mkl_buffers();
 
 void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
 int *gen_types(int num, double *ratio);
+double *linspace(double x0, double x1, int len_x);
 
 #endif

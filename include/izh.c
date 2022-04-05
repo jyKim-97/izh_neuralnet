@@ -46,6 +46,8 @@ const double default_cell_params[MAX_TYPE][4]= {
 const double default_syn_veq[MAX_TYPE] = {0, -80, 0, 0};
 const double default_syn_tau[MAX_TYPE] = {5, 6, 5, 5};
 double t_skip_phs = 5; // Using when calculate spike phase, ms
+double fs = 2000;
+double f_cut[2] = {2, 300};
 
 
 void init_random_stream(long int seed)
@@ -213,7 +215,7 @@ void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns
         memcpy(cells->ic, ic, sz_d*cells->num_cells);
     }
 
-    int *id_fired_bck = (int*) malloc(sizeof(int) * (bck_syns->num_pres));
+    int *id_fired_bck = (int*) malloc(sizeof(int) * (bck_syns->num_pres+1));
     gen_bck_spike(bck_syns, id_fired_bck);
     update_syns_no_delay(bck_syns, id_fired_bck);
     add_isyn_bck(bck_syns);
@@ -719,12 +721,112 @@ void append_spike(int nstep, int *num_spk, int **t_spk)
 }
 
 
+double *linspace(double x0, double x1, int len_x)
+{
+    double *x = (double*) malloc(sizeof(double) * len_x);
+    for (int n=0; n<len_x; n++){
+        x[n] = n*(x1-x0)/(len_x-1)+x0;
+    }
+    return x;
+}
+
+
 void read_ptr(int num_x, double *x, double **ptr_x)
 {
     // #pragma omp parallel for if (num_x > 1000)
     for (int n=0; n<num_x; n++){
         x[n] = *(ptr_x[n]);
     }
+}
+
+
+void downsampling(int len, double *y_org, double target_fs, arg_t *new_vars)
+{
+    double fs_org = 1000./_dt;
+    int nskip = fs_org/target_fs;
+    int len_new = len/nskip;
+
+    new_vars->len = len_new;
+    new_vars->x = (double*) malloc(sz_d * len_new);
+    new_vars->y = (double*) malloc(sz_d * len_new);
+    for (int n=0; n<len_new; n++){
+        new_vars->x[n] = n*nskip*_dt;
+        new_vars->y[n] = y_org[nskip*n];
+    }
+}
+
+
+void get_fft_summary(double *vm, double t_range[2], arg_t *fft_res)
+{
+    // t_range is the ms unit
+    int n0 = t_range[0]*fs/1000.;
+    int len_vm = (t_range[1] - t_range[0])*fs/1000.;
+
+    double *yft_tmp = get_fft(len_vm, vm+n0);
+    double *freq_tmp = get_fft_freq(len_vm, fs);
+
+    int n_cut[2];
+    if (f_cut[1] > fs/2) f_cut[1] = fs/2;
+    for (int n=0; n<2; n++) n_cut[n] = f_cut[n]/fs*len_vm;
+
+    int len_new = n_cut[1]-n_cut[0];
+    fft_res->len = len_new;
+    fft_res->x = (double*) malloc(sz_d * len_new);
+    fft_res->y = (double*) malloc(sz_d * len_new);
+    memcpy(fft_res->x, freq_tmp, sz_d * len_new);
+    memcpy(fft_res->y, yft_tmp, sz_d * len_new);
+
+    free(yft_tmp);
+    free(freq_tmp);
+}
+
+
+void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t *summary)
+{
+    // downsampling
+    arg_t res_vm;
+    downsampling(max_step, vm, fs, &res_vm);
+    summary->num_times = res_vm.len;
+    summary->t = res_vm.x;
+    summary->vm = res_vm.y;
+
+    arg_t res_rk;
+    double *rk_tmp, *psi_tmp;
+    rk_tmp = (double*) malloc(sz_d * max_step);
+    psi_tmp = (double*) malloc(sz_d * max_step);
+    int flag=0;
+    if (targets == NULL){
+        targets = (int*) calloc(cells->num_cells, sizeof(int));
+        for (int n=0; n<cells->num_cells; n++){
+            if (cells->types[n] == 0) targets[n] = 1;
+        }
+        flag = 1;
+    }
+    get_Kuramoto_order_params(max_step, cells, targets, rk_tmp, psi_tmp);
+    downsampling(max_step, rk_tmp, fs, &res_rk);
+    summary->rk = res_rk.y;
+    free(res_rk.x);
+    free(rk_tmp);
+    free(psi_tmp);
+    if (flag == 1) free(targets);
+
+    arg_t res_fft;
+    double t_range[2] = {(max_step-5000)*_dt, max_step*_dt};
+    if (t_range[0] < 0) t_range[0] = 0;
+    get_fft_summary(vm, t_range, &res_fft);
+    summary->num_freqs = res_fft.len;
+    summary->freq = res_fft.x;
+    summary->yf = res_fft.y;
+}
+
+
+void free_summary(res_t *summary)
+{
+    free(summary->t);
+    free(summary->vm);
+    free(summary->rk);
+    free(summary->freq);
+    free(summary->yf);
 }
 
 
@@ -826,6 +928,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
         bck_syns->p_fire[n] = info->frbck[tp] * _dt / 1000.;
     }
 
+    free(cell_types);
     free(bck_types);
     free_bi_ntk(&ntk_syn);
     free_bi_ntk(&ntk_bck);
