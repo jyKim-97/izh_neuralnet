@@ -39,20 +39,15 @@ VSLStreamStatePtr rand_stream;
 
 double _dt = 0.005; // simulation time step
 const double default_cell_params[MAX_TYPE][4]= {
-            {0.02, 0.2, -65, 8},    // RS
+        {0.02, 0.2, -65, 8},    // RS
             {0.1, 0.2, -65, 2},   // FS
             {0.02, 0.2, -55, 4},    // IB
             {0.02, 0.2, -50, 2}};   // CH
 const double default_syn_veq[MAX_TYPE] = {0, -80, 0, 0};
 const double default_syn_tau[MAX_TYPE] = {5, 6, 5, 5};
 double t_skip_phs = 5; // Using when calculate spike phase, ms
-
-#include <sys/time.h>
-#include <time.h>
-#define CHECKPOINT(tic) clock_gettime(CLOCK_MONOTONIC, &tic)
-#define GET_ELAPSED(tic, toc) (toc.tv_sec - tic.tv_sec) + (toc.tv_nsec - tic.tv_nsec)*1e-9
-double dt_set[10] = {0,};
-struct timespec tic, toc;
+double fs = 2000;
+double f_cut[2] = {4, 300};
 
 
 void init_random_stream(long int seed)
@@ -95,6 +90,9 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int
         cells->t_fired[n][0] = -1;
         cells->id_fired[n] = -1;
     }
+
+    cells->types = (int*) malloc(sizeof(double) * num_cells);
+    memcpy(cells->types, cell_types, sizeof(double) * num_cells);
 }
 
 
@@ -217,7 +215,7 @@ void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns
         memcpy(cells->ic, ic, sz_d*cells->num_cells);
     }
 
-    int *id_fired_bck = (int*) malloc(sizeof(int) * (bck_syns->num_pres));
+    int *id_fired_bck = (int*) malloc(sizeof(int) * (bck_syns->num_pres+1));
     gen_bck_spike(bck_syns, id_fired_bck);
     update_syns_no_delay(bck_syns, id_fired_bck);
     add_isyn_bck(bck_syns);
@@ -283,27 +281,6 @@ void add_isyn(syn_t *syns)
 
     free_c(isyn);
 }
-// void add_isyn(syn_t *syns)
-// {
-//     /*** ic -= weight * r * (vpost - veq) ***/
-//     int N = syns->num_syns;
-
-//     double *rsyns = (double*) malloc_c(sz_d * N);
-//     read_ptr(N, rsyns, syns->ptr_r);
-
-//     double *isyn = (double*) malloc_c(sz_d * N);
-//     read_ptr(N, isyn, syns->ptr_vpost);
-//     cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
-//     vdMul(N, syns->weight, isyn, isyn);
-//     vdMul(N, rsyns, isyn, isyn);
-
-//     for (int n=0; n<N; n++){
-//         *(syns->ptr_ipost[n]) -= isyn[n];
-//     }
-
-//     free_c(isyn);
-//     free_c(rsyns);
-// }
 
 
 void add_isyn_delay(syn_t *syns)
@@ -744,12 +721,112 @@ void append_spike(int nstep, int *num_spk, int **t_spk)
 }
 
 
+double *linspace(double x0, double x1, int len_x)
+{
+    double *x = (double*) malloc(sizeof(double) * len_x);
+    for (int n=0; n<len_x; n++){
+        x[n] = n*(x1-x0)/(len_x-1)+x0;
+    }
+    return x;
+}
+
+
 void read_ptr(int num_x, double *x, double **ptr_x)
 {
     // #pragma omp parallel for if (num_x > 1000)
     for (int n=0; n<num_x; n++){
         x[n] = *(ptr_x[n]);
     }
+}
+
+
+void downsampling(int len, double *y_org, double target_fs, arg_t *new_vars)
+{
+    double fs_org = 1000./_dt;
+    int nskip = fs_org/target_fs;
+    int len_new = len/nskip;
+
+    new_vars->len = len_new;
+    new_vars->x = (double*) malloc(sz_d * len_new);
+    new_vars->y = (double*) malloc(sz_d * len_new);
+    for (int n=0; n<len_new; n++){
+        new_vars->x[n] = n*nskip*_dt;
+        new_vars->y[n] = y_org[nskip*n];
+    }
+}
+
+
+void get_fft_summary(double *vm, double sample_rate, double t_range[2], arg_t *fft_res)
+{
+    // t_range is the ms unit
+    int n0 = t_range[0]*sample_rate/1000.;
+    int len_vm = (t_range[1] - t_range[0])/1000.*sample_rate;
+
+    double *yft_tmp = get_fft(len_vm, vm+n0);
+    double *freq_tmp = get_fft_freq(len_vm, sample_rate);
+
+    int n_cut[2];
+    if (f_cut[1] > fs/2) f_cut[1] = sample_rate/2;
+    for (int n=0; n<2; n++) n_cut[n] = f_cut[n]/fs*len_vm;
+
+    int len_new = n_cut[1]-n_cut[0];
+    fft_res->len = len_new;
+    fft_res->x = (double*) malloc(sz_d * len_new);
+    fft_res->y = (double*) malloc(sz_d * len_new);
+    memcpy(fft_res->x, freq_tmp+n_cut[0], sz_d * len_new);
+    memcpy(fft_res->y, yft_tmp+n_cut[0], sz_d * len_new);
+
+    free(yft_tmp);
+    free(freq_tmp);
+}
+
+
+void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t *summary)
+{
+    // downsampling
+    arg_t res_vm;
+    downsampling(max_step, vm, fs, &res_vm);
+    summary->num_times = res_vm.len;
+    summary->t = res_vm.x;
+    summary->vm = res_vm.y;
+
+    arg_t res_rk;
+    double *rk_tmp, *psi_tmp;
+    rk_tmp = (double*) malloc(sz_d * max_step);
+    psi_tmp = (double*) malloc(sz_d * max_step);
+    int flag=0;
+    if (targets == NULL){
+        targets = (int*) calloc(cells->num_cells, sizeof(int));
+        for (int n=0; n<cells->num_cells; n++){
+            if (cells->types[n] == 0) targets[n] = 1;
+        }
+        flag = 1;
+    }
+    get_Kuramoto_order_params(max_step, cells, targets, rk_tmp, psi_tmp);
+    downsampling(max_step, rk_tmp, fs, &res_rk);
+    summary->rk = res_rk.y;
+    free(res_rk.x);
+    free(rk_tmp);
+    free(psi_tmp);
+    if (flag == 1) free(targets);
+
+    arg_t res_fft;
+    double t_range[2] = {(max_step*_dt)-5000, max_step*_dt};
+    if (t_range[0] < 0) t_range[0] = 0;
+    get_fft_summary(summary->vm, fs, t_range, &res_fft);
+    summary->num_freqs = res_fft.len;
+    summary->freq = res_fft.x;
+    summary->yf = res_fft.y;
+}
+
+
+void free_summary(res_t *summary)
+{
+    free(summary->t);
+    free(summary->vm);
+    free(summary->rk);
+    free(summary->freq);
+    free(summary->yf);
 }
 
 
@@ -768,6 +845,7 @@ void free_neurons(neuron_t *cells)
         free(cells->t_fired[n]);
     }
     free(cells->t_fired);
+    free(cells->types);
 }
 
 
@@ -814,17 +892,17 @@ void destroy_mkl_buffers()
 
 void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns)
 {
-    info->cell_types = gen_types(info->num_cells, info->cell_type_ratio);
-    init_cell_vars(cells, info->num_cells, info->cell_params, info->cell_types);
+    int *cell_types = gen_types(info->num_cells, info->cell_type_ratio);
+    init_cell_vars(cells, info->num_cells, info->cell_params, cell_types);
 
     ntk_t ntk_syn;
     SYN_TYPE type;
     syns->type_p = info->type_p;
     init_bi_ntk(info->num_cells, info->num_cells, &ntk_syn);
     if (info->type_ntk == MEAN_DEG){
-        gen_bi_random_ntk_mean_deg(info->cell_types, info->cell_types, info->mean_degs, info->gsyns, &ntk_syn);
+        gen_bi_random_ntk_mean_deg(cell_types, cell_types, info->mean_degs, info->gsyns, &ntk_syn);
     } else if (info->type_ntk == PROB) {
-        gen_bi_random_ntk_with_type(info->cell_types, info->cell_types, info->psyns, info->gsyns, &ntk_syn);
+        gen_bi_random_ntk_with_type(cell_types, cell_types, info->psyns, info->gsyns, &ntk_syn);
     }
     if ((info->t_delay_m == 0) && (info->t_delay_std == 0)){
         type = NO_DELAY;
@@ -842,7 +920,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     ntk_t ntk_bck;
     int *bck_types = gen_types(info->num_bck, info->bck_type_ratio);
     init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck);
-    gen_bi_random_ntk_with_type(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
+    gen_bi_random_ntk_with_type(bck_types, cell_types, info->pbck, info->gbck, &ntk_bck);
     // gen_bi_random_ntk_fixed_indeg(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
     init_syn_vars(bck_syns, info->num_bck, BACKGROUND, &ntk_bck, info->bck_veq, info->bck_tau, cells->v, cells->ic);
     for (int n=0; n<info->num_bck; n++){
@@ -850,14 +928,10 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
         bck_syns->p_fire[n] = info->frbck[tp] * _dt / 1000.;
     }
 
+    free(cell_types);
     free(bck_types);
     free_bi_ntk(&ntk_syn);
     free_bi_ntk(&ntk_bck);
-}
-
-
-void free_info(network_info_t *info){
-    free(info->cell_types);
 }
 
 
@@ -881,77 +955,3 @@ int *gen_types(int num, double *ratio)
     return types;
 }
 
-
-void export_env(char tag[], network_info_t *info, int num_add, ...){
-    char fname[200];
-    sprintf(fname, "%s_env.json", tag);
-
-    JSON_Value *root_value;
-    JSON_Object *root_obj;
-
-    root_value = json_value_init_object();
-    root_obj = json_value_get_object(root_value);
-
-    json_object_set_number(root_obj, "num_cells", info->num_cells);
-    write_array_d(root_obj, "cell_type_ratio", info->cell_type_ratio, 2);
-    write_array_i(root_obj, "mean_degs, e->", info->mean_degs[0], 2);
-    write_array_i(root_obj, "mean_degs, i->", info->mean_degs[1], 2);
-    write_array_d(root_obj, "g_syn, e->", info->gsyns[0], 2);
-    write_array_d(root_obj, "g_syn, i->", info->gsyns[1], 2);
-
-    write_array_d(root_obj, "g_syn, i->", info->gsyns[1], 2);
-    write_array_d(root_obj, "g_syn, i->", info->gsyns[1], 2);
-    
-    json_object_set_number(root_obj, "num_bck", info->num_bck);
-    json_object_set_number(root_obj, "fr_bck", info->frbck[0]);
-    write_array_d(root_obj, "p_bck", info->pbck[0], 2);
-    write_array_d(root_obj, "g_bck", info->gbck[0], 2);
-    json_object_set_number(root_obj, "dt", _dt);
-
-    json_object_set_number(root_obj, "t_delay_m", info->t_delay_m);
-    json_object_set_number(root_obj, "t_delay_s", info->t_delay_std);
-
-    // read additional parameters
-    va_list ap;
-    va_start(ap, num_add);
-    for (int n=num_add; n>0; n--)
-    {
-        char *var_name = va_arg(ap, char*);
-        double var = va_arg(ap, double);
-        json_object_set_number(root_obj, var_name, var);
-    }
-    va_end(ap);
-
-    json_serialize_to_file_pretty(root_value, fname);
-    json_value_free(root_value);
-}
-
-
-void export_ntk(syn_t *syns, char fname[])
-{
-    FILE *fp = fopen(fname, "w");
-    for (int n=0; n<syns->num_syns; n++){
-        fprintf(fp, "%d,%d,%d,%f,%f\n", n, syns->id_pre_neuron[n], syns->id_post_neuron[n], syns->weight[n], syns->veq[n]);
-    }
-    fclose(fp);
-}
-
-
-void write_array_d(JSON_Object *root_obj, char arr_name[], double arr1d[], int narr)
-{
-    json_object_set_value(root_obj, arr_name, json_value_init_array());
-    JSON_Array *arr = json_object_get_array(root_obj, arr_name);
-    for (int n=0; n<narr; n++){
-        json_array_append_number(arr, arr1d[n]);
-    }
-}
-
-
-void write_array_i(JSON_Object *root_obj, char arr_name[], int arr1d[], int narr)
-{
-    json_object_set_value(root_obj, arr_name, json_value_init_array());
-    JSON_Array *arr = json_object_get_array(root_obj, arr_name);
-    for (int n=0; n<narr; n++){
-        json_array_append_number(arr, arr1d[n]);
-    }
-}
