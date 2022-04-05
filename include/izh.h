@@ -145,7 +145,4 @@ void destroy_mkl_buffers();
 void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
 int *gen_types(int num, double *ratio);
 
-void export_ntk(syn_t *syns, char fname[]);
-void export_env(char tag[], network_info_t *info, int num_add, ...);
-
 #endif

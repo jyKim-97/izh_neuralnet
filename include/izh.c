@@ -47,13 +47,6 @@ const double default_syn_veq[MAX_TYPE] = {0, -80, 0, 0};
 const double default_syn_tau[MAX_TYPE] = {5, 6, 5, 5};
 double t_skip_phs = 5; // Using when calculate spike phase, ms
 
-#include <sys/time.h>
-#include <time.h>
-#define CHECKPOINT(tic) clock_gettime(CLOCK_MONOTONIC, &tic)
-#define GET_ELAPSED(tic, toc) (toc.tv_sec - tic.tv_sec) + (toc.tv_nsec - tic.tv_nsec)*1e-9
-double dt_set[10] = {0,};
-struct timespec tic, toc;
-
 
 void init_random_stream(long int seed)
 {
