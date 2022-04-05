@@ -39,7 +39,7 @@ VSLStreamStatePtr rand_stream;
 
 double _dt = 0.005; // simulation time step
 const double default_cell_params[MAX_TYPE][4]= {
-            {0.02, 0.2, -65, 8},    // RS
+        {0.02, 0.2, -65, 8},    // RS
             {0.1, 0.2, -65, 2},   // FS
             {0.02, 0.2, -55, 4},    // IB
             {0.02, 0.2, -50, 2}};   // CH
@@ -47,7 +47,7 @@ const double default_syn_veq[MAX_TYPE] = {0, -80, 0, 0};
 const double default_syn_tau[MAX_TYPE] = {5, 6, 5, 5};
 double t_skip_phs = 5; // Using when calculate spike phase, ms
 double fs = 2000;
-double f_cut[2] = {2, 300};
+double f_cut[2] = {4, 300};
 
 
 void init_random_stream(long int seed)
@@ -756,25 +756,25 @@ void downsampling(int len, double *y_org, double target_fs, arg_t *new_vars)
 }
 
 
-void get_fft_summary(double *vm, double t_range[2], arg_t *fft_res)
+void get_fft_summary(double *vm, double sample_rate, double t_range[2], arg_t *fft_res)
 {
     // t_range is the ms unit
-    int n0 = t_range[0]*fs/1000.;
-    int len_vm = (t_range[1] - t_range[0])*fs/1000.;
+    int n0 = t_range[0]*sample_rate/1000.;
+    int len_vm = (t_range[1] - t_range[0])/1000.*sample_rate;
 
     double *yft_tmp = get_fft(len_vm, vm+n0);
-    double *freq_tmp = get_fft_freq(len_vm, fs);
+    double *freq_tmp = get_fft_freq(len_vm, sample_rate);
 
     int n_cut[2];
-    if (f_cut[1] > fs/2) f_cut[1] = fs/2;
+    if (f_cut[1] > fs/2) f_cut[1] = sample_rate/2;
     for (int n=0; n<2; n++) n_cut[n] = f_cut[n]/fs*len_vm;
 
     int len_new = n_cut[1]-n_cut[0];
     fft_res->len = len_new;
     fft_res->x = (double*) malloc(sz_d * len_new);
     fft_res->y = (double*) malloc(sz_d * len_new);
-    memcpy(fft_res->x, freq_tmp, sz_d * len_new);
-    memcpy(fft_res->y, yft_tmp, sz_d * len_new);
+    memcpy(fft_res->x, freq_tmp+n_cut[0], sz_d * len_new);
+    memcpy(fft_res->y, yft_tmp+n_cut[0], sz_d * len_new);
 
     free(yft_tmp);
     free(freq_tmp);
@@ -811,9 +811,9 @@ void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t 
     if (flag == 1) free(targets);
 
     arg_t res_fft;
-    double t_range[2] = {(max_step-5000)*_dt, max_step*_dt};
+    double t_range[2] = {(max_step*_dt)-5000, max_step*_dt};
     if (t_range[0] < 0) t_range[0] = 0;
-    get_fft_summary(vm, t_range, &res_fft);
+    get_fft_summary(summary->vm, fs, t_range, &res_fft);
     summary->num_freqs = res_fft.len;
     summary->freq = res_fft.x;
     summary->yf = res_fft.y;

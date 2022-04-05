@@ -153,7 +153,7 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
 void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase);
 double *get_fft(int len, double *x_in);
 double *get_fft_freq(int len, double fs);
-void get_fft_summary(double *vm, double t_range[2], arg_t *fft_res);
+void get_fft_summary(double *vm, double sample_rate, double t_range[2], arg_t *fft_res);
 void downsampling(int len, double *y_org, double fs, arg_t *new_vars);
 void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t *summary);
 
