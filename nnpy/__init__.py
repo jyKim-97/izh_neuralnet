@@ -1,1 +1,1 @@
-__all__ = ["izh_tools", "visu_tools", "pyeeg"]
+__all__ = ["izh_tools", "pyeeg"]
