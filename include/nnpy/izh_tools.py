@@ -1,6 +1,8 @@
 from struct import unpack
 import numpy as np
 import matplotlib.pyplot as plt
+import json
+import os
 
 
 class IzhReader:
@@ -11,34 +13,65 @@ class IzhReader:
         self.rs = None
         self.ics = None
         self.t_spks = None
-        self._read_info()
         
-    def _read_info(self):
+        if os.path.isfile(f'{self.tag}_env.txt'):
+            self._read_info_txt()
+        else:
+            self._read_info()
+        self.ts = np.arange(0, self.tmax, self.dt)+self.dt
+        self.read_all_data()
+
+    def _read_info_txt(self):
         with open(f'{self.tag}_env.txt', 'r') as fid:
             self.num_cells = int(fid.readline().split('=')[1][:-1])
             self.num_bck = int(fid.readline().split('=')[1][:-1])
             self.tmax = float(fid.readline().split('=')[1][:-1])
             self.dt = float(fid.readline().split('=')[1][:-1])
             self.cell_types = [int(i) for i in fid.readline().split(",")[:-1]]
-            self.file_id = fid.readline()
-        self.ts = np.arange(0, self.tmax, self.dt) + self.dt
-        self.read_file()
-        
-    def read_file(self):
+
+    def _read_info(self):
+        with open(f'{self.tag}_env.json', 'r') as fid:
+            self.info = json.load(fid)
+            self.num_cells = self.info["num_cells"]
+            self.num_bck = self.info["num_bck"]
+            self.dt = self.info["dt"]
+            self.tmax = self.info["tmax"]
+            self._gen_types()
+    
+    def _gen_types(self):
+        ratio = self.info["cell_type_ratio"]
+        self.cell_types = np.zeros(self.num_cells, dtype=int)
+        tp, n_end = 0, int(self.num_cells * ratio[0])
+        for n in range(self.num_cells):
+            if n > n_end:
+                tp += 1
+                n_end += int(self.num_cells * ratio[tp])
+            self.cell_types[n] = tp
+
+    def read_all_data(self):
         var_names = ["vs", "us", "ics"]
         fnames = ["fv", "fu", "fi"]
         for n in range(3):
-            if int(self.file_id[n]) == 1:
+            if os.path.isfile(self.tag+"_%s.dat"%(fnames[n])):
                 self.read_dat(var_names[n], fnames[n])
-        if int(self.file_id[3]) == 1:
-            self.read_tspk()
         
+        if os.path.isfile(self.tag+"_ft_spk.dat"):
+            self.read_tspk_dat()
+        elif os.path.isfile(self.tag+"_ft_spk.txt"):
+            self.read_tspk()
+
     def read_dat(self, varname, fname):
         x = read_byte_data(f"{self.tag}_%s.dat"%(fname), self.num_cells)      
         exec("self.%s = x"%(varname))
         
     def read_tspk(self):
-        self.t_spks = read_tspk(f"{self.tag}_ft_spk", self.num_cells, self.ts)
+        self.t_spks = [[] for i in range(N)]
+        with open(f"{self.tag}_ft_spk", "r") as fid:
+            line = fid.readline() 
+        data = line.split(",")[:-1]
+        for pair in data:
+            nstep, nid = pair.split("-")
+            self.t_spks[int(nid)].append(ts[int(nstep)])
         self.num_spks = [len(t) for t in self.t_spks]
 
     def read_tspk_dat(self):
@@ -54,16 +87,8 @@ class IzhReader:
             self.t_spks.append(t_spks_flat[n0:n0+self.num_spks[n]])
             n0 += self.num_spks[n]
 
-
-def read_tspk(fname, N, ts):
-    t_spks = [[] for i in range(N)]
-    with open(fname+".txt", "r") as fid:
-        line = fid.readline() 
-    data = line.split(",")[:-1]
-    for pair in data:
-        nstep, nid = pair.split("-")
-        t_spks[int(nid)].append(ts[int(nstep)])
-    return t_spks
+    def read_summary(self):
+        pass
 
 
 def read_byte_data(fname, N):
@@ -72,17 +97,6 @@ def read_byte_data(fname, N):
     nline = len(data) // N
     # return data.reshape([N, nline], order='C')
     return data.reshape([nline, N], order='C').T
-
-
-def get_phase(t_spks, N, ts):
-    phase = np.zeros([N, len(ts)])
-    phase[:] = np.nan 
-
-    dt = ts[1]-ts[0]
-
-    for n in range(N):
-        for t in ts:
-            i = int(t / dt)
 
 
 def get_raster_plot(t_spks, cell_types):
@@ -137,3 +151,102 @@ def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s
     plt.yticks(yt, labels=['#%d'%(i) for i in yt])
     
     return x, y, c
+
+
+def draw_single_summary(tag, xlim=None, flim=(5,105), clim=None, vlim=None, title=None, xplim=None, ha='center'):
+    
+    from matplotlib.patches import Rectangle
+
+    def set_axes(xt=()):
+        plt.xticks(xt, fontsize=8)
+        plt.yticks(fontsize=8)
+    
+    obj = it.IzhReader(tag)
+    if os.path.isfile(tag+"_ft_spk.info"):
+        obj.read_tspk_dat()
+    else:
+         obj.read_tspk()
+    
+    spk_hist, t_hist = get_spike_hist(obj, tbin=5)
+    
+    obj.rk, obj.vm, obj.f, obj.yf = read_summary(obj.tag)
+    nskip = len(obj.ts)//len(obj.rk)
+    obj.ts_d = obj.ts[::nskip]
+    psd, fpsd, tpsd = pyeeg.get_stfft(obj.vm, obj.ts_d, 2000, wbin_t=0.5, mbin_t=0.01, f_range=(4, 200))
+
+    ax1 = plt.axes((0.1, 0.65, 0.6, 0.2))
+    it.draw_raster_plot(obj.t_spks, cell_types=obj.cell_types, xlim=xlim)
+    plt.xlabel("")
+    plt.xlim(xlim)
+    plt.ylim([-30, obj.num_cells+30])
+    set_axes(np.arange(xlim[0], xlim[1]+1, 100))
+    plt.ylabel("cell id", fontsize=10)
+    ax = plt.twinx()
+    plt.plot(t_hist, spk_hist, 'k', lw=1)
+    set_axes(np.arange(xlim[0], xlim[1]+1, 100))
+    plt.ylim([-0.1, 1.1])
+    plt.ylabel(r"$p_{fire}$")
+    
+    rect_args = [[xlim[0], vlim[0]], xlim[1]-xlim[0], vlim[1]-vlim[0]]
+    rect_kwargs = {"edgecolor": "k", "facecolor": "k", "fill":True, "alpha": 0.2, "linewidth":1}
+    
+    xt = np.arange(xplim[0], xplim[1]+1, 2000)
+    ax2 = plt.axes((0.1, 0.35, 0.6, 0.22))
+    plt.plot(obj.ts_d, np.array(obj.vm), 'k', lw=1)
+    plt.xlim(xplim)
+    plt.ylim(vlim)
+    set_axes()
+    plt.ylabel(r"$\langle v \rangle$", fontsize=10)
+    ax = plt.twinx()
+    plt.plot(obj.ts_d, obj.rk, 'r', lw=1)
+    plt.ylabel(r"$r_{k}$")
+    plt.ylim([-0.1, 1.1])
+    ax.spines["right"].set_color("r")
+    ax.yaxis.label.set_color("r")
+    ax.tick_params(axis="y", color="r")
+    plt.yticks(color="r")
+    plt.xticks(xt, labels=[])
+    plt.yticks(fontsize=8, color="r")
+    ax2.add_patch(Rectangle(*rect_args, **rect_kwargs))
+    
+    rect_args[0][1] = flim[0]
+    rect_args[2] = flim[1]-flim[0]
+    
+    ax3 = plt.axes((0.1, 0.1, 0.6, 0.25))
+    yt = np.arange((flim[0]//10)*10, flim[-1]+10, 20)
+    if clim is None:
+        clim = [None, None]
+    plt.imshow(psd, origin='lower', extent=(tpsd[0]*1e3, tpsd[-1]*1e3, fpsd[0], fpsd[-1]), aspect='auto', cmap='jet', vmax=clim[1], vmin=clim[0])
+    plt.xticks(xt, fontsize=8)
+    plt.yticks(yt, fontsize=8)
+    plt.xlim(xplim)
+    plt.ylim(flim)
+    plt.xlabel("time (ms)", fontsize=10)
+    plt.ylabel("frequency (Hz)", fontsize=10)
+    ax3.add_patch(Rectangle(*rect_args, **rect_kwargs))
+
+    plt.axes((0.78, 0.1, 0.15, 0.75))
+    plt.yticks([])
+    plt.twinx()
+    
+    nf = np.argmax(obj.yf)
+    yl = obj.yf[nf]
+    yl = [-0.05*yl, 1.2*yl]
+    
+    plt.plot(obj.f, obj.yf, 'k', lw=1)
+    plt.plot(obj.f[nf], 1.02*obj.yf[nf], 'rv', markersize=5)
+    plt.text(obj.f[nf], 1.06*obj.yf[nf], r"$%d$ Hz"%(obj.f[nf]), fontsize=8, ha=ha)
+    plt.xticks(yt, fontsize=8)
+    plt.xlim(flim)
+    plt.ylim(yl)
+    
+    plt.yticks(fontsize=8)
+    plt.xlabel('frequency (Hz)', fontsize=10)
+    tw = ((obj.tmax-2000)/1000, (obj.tmax-1000)/1000)
+    plt.ylabel("fft result from %d~%ds"%(tw), fontsize=10)
+    
+    if title is None:
+        title = tag
+    plt.suptitle(title)
+
+    return obj
