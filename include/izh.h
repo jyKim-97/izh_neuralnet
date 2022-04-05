@@ -2,7 +2,6 @@
 #define IZH
 
 #include "ntk.h"
-#include "parson.h"
 #define MAX_TYPE 6
 
 extern double _dt;
@@ -27,8 +26,7 @@ typedef enum _NET_TYPE {
 } NET_TYPE;
 
 
-typedef struct _neuron_t
-{
+typedef struct _neuron_t {
     int num_cells;
     double *v, *u, *ic;
     // izhikevich neuron model parameters
@@ -43,8 +41,7 @@ typedef struct _neuron_t
 } neuron_t;
 
 
-typedef struct _syn_t
-{
+typedef struct _syn_t {
     int num_pres;
     int num_syns;
     SYN_TYPE type;
