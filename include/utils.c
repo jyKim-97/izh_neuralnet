@@ -1,5 +1,16 @@
 #include <stdio.h>
 #include "utils.h"
+#include <stdbool.h>
+
+
+static bool no_diff_line = true;
+
+
+void set_progressbar_line(progbar_t *bar, int id_line)
+{
+    bar->id_line = id_line;
+    no_diff_line = false;
+}
 
 
 void init_progressbar(progbar_t *bar, int max_step)
@@ -8,18 +19,24 @@ void init_progressbar(progbar_t *bar, int max_step)
     bar->div = max_step/_len_progbar;
     gettimeofday(&(bar->tic), NULL);
 
-    fprintf(stderr, "[");
+    if (no_diff_line){
+        bar->id_line = 0;
+        fprintf(stderr, "\n");
+    }
+
+    fprintf(stderr, "\033[%dB[", bar->id_line+1);
     for (int n=0; n<_len_progbar; n++){
         fprintf(stderr, " ");
     }
-    fprintf(stderr, "] ( )");
+    fprintf(stderr, "] ( )\033[%dA\r", bar->id_line+1);
 }
 
 
 void progressbar(progbar_t *bar, int nstep)
 {
     if ((nstep+1)%(bar->div) == 0){
-        fprintf(stderr, "\r[");
+        int percent = (double)nstep/(bar->max_step)*100;
+        fprintf(stderr, "\r\033[%dB[", bar->id_line+1);
         int i, nbar = (nstep+1)/(bar->div);
         for (i=0; i<nbar; i++){
             fprintf(stderr, "=");
@@ -37,7 +54,8 @@ void progressbar(progbar_t *bar, int nstep)
         pred_end_time = dt * ((double) bar->max_step) / ((double) nstep);
 
         fprintf(stderr, "(%5.1fs / %5.1fs)", dt, pred_end_time);
-        fprintf(stderr, "\r");
+        fprintf(stderr, "\r[%3d%%", percent);
+        fprintf(stderr, "\033[%dA", bar->id_line+1);
     }
 }
 
