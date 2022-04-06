@@ -774,7 +774,7 @@ void get_fft_summary(double *vm, double sample_rate, double t_range[2], arg_t *f
     double *freq_tmp = get_fft_freq(len_vm, sample_rate);
 
     int n_cut[2];
-    if (f_cut[1] > fs/2) f_cut[1] = sample_rate/2;
+    if (f_cut[1] > sample_rate/2) f_cut[1] = sample_rate/2;
     for (int n=0; n<2; n++) n_cut[n] = f_cut[n]/sample_rate*len_vm;
 
     int len_new = n_cut[1]-n_cut[0];
@@ -902,7 +902,6 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
 {
     int *cell_types = gen_types(info->num_cells, info->cell_type_ratio);
     init_cell_vars(cells, info->num_cells, info->cell_params, cell_types);
-    // init_cell_vars(cells, info->num_cells, default_cell_params, cell_types);
 
     ntk_t ntk_syn;
     SYN_TYPE type;
@@ -913,6 +912,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     } else if (info->type_ntk == PROB) {
         gen_bi_random_ntk_with_type(cell_types, cell_types, info->psyns, info->gsyns, &ntk_syn);
     }
+
     if ((info->t_delay_m == 0) && (info->t_delay_std == 0)){
         type = NO_DELAY;
     } else {
@@ -930,7 +930,6 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     int *bck_types = gen_types(info->num_bck, info->bck_type_ratio);
     init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck);
     gen_bi_random_ntk_with_type(bck_types, cell_types, info->pbck, info->gbck, &ntk_bck);
-    // gen_bi_random_ntk_fixed_indeg(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
     init_syn_vars(bck_syns, info->num_bck, BACKGROUND, &ntk_bck, info->bck_veq, info->bck_tau, cells->v, cells->ic);
     for (int n=0; n<info->num_bck; n++){
         int tp = bck_types[n];
