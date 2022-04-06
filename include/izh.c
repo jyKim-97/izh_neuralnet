@@ -42,7 +42,9 @@ const double default_cell_params[MAX_TYPE][4]= {
         {0.02, 0.2, -65, 8},    // RS
             {0.1, 0.2, -65, 2},   // FS
             {0.02, 0.2, -55, 4},    // IB
-            {0.02, 0.2, -50, 2}};   // CH
+            {0.02, 0.2, -50, 2},
+            {0, 0, 0, 0},
+            {0, 0, 0, 0}};   // CH
 const double default_syn_veq[MAX_TYPE] = {0, -80, 0, 0};
 const double default_syn_tau[MAX_TYPE] = {5, 6, 5, 5};
 double t_skip_phs = 5; // Using when calculate spike phase, ms
@@ -56,7 +58,7 @@ void init_random_stream(long int seed)
     init_genrand64(seed);
 }
 
-void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int *cell_types)
+void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE][4], int *cell_types)
 {
     cells->num_cells = num_cells;
 
@@ -91,8 +93,8 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[][4], int
         cells->id_fired[n] = -1;
     }
 
-    cells->types = (int*) malloc(sizeof(double) * num_cells);
-    memcpy(cells->types, cell_types, sizeof(double) * num_cells);
+    cells->types = (int*) malloc(sizeof(int) * num_cells);
+    memcpy(cells->types, cell_types, sizeof(int) * num_cells);
 }
 
 
@@ -126,7 +128,7 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double 
             for (int i=0; i<num_syns; i++) { syns->x[i] = 1; }
             syns->z = (double*) calloc_c(num_syns, sz_d);
         }
-    } else {
+    } else { // NO_DELAY, BACKGROUNS
         syns->r = (double*) calloc_c(num_pres, sz_d);
         syns->inv_tau = (double*) malloc_c(sz_d * num_pres);
         syns->ptr_r = (double**) malloc(sizeof(double*) * num_syns);
@@ -143,6 +145,7 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double 
         } else {
             syns->p_fire = (double*) malloc(sz_d * num_pres);
             syns->delay = NULL;
+            syns->type_p = NONE;
         }
     }
 
@@ -195,6 +198,7 @@ void update_no_delay(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t 
     }
 
     int *id_fired_bck = (int*) malloc(sizeof(int) * (bck_syns->num_pres));
+    id_fired_bck[0] = -1;
     gen_bck_spike(bck_syns, id_fired_bck);
     update_syns_no_delay(bck_syns, id_fired_bck);
     add_isyn_bck(bck_syns);
@@ -482,9 +486,11 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
         ptr_id++;
     }
 
-    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
+    double *dr_new = (double*) malloc_c(sz_d * syns->num_pres);
+    vdMul(syns->num_pres, syns->inv_tau, dr, dr_new);
+    free(dr);
 
-    return dr;
+    return dr_new;
 }
 
 
@@ -516,9 +522,11 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
         }
     }
 
-    vdMul(syns->num_syns, syns->inv_tau, dr, dr);
+    double *dr_new = (double*) malloc_c(sz_d * syns->num_syns);
+    vdMul(syns->num_syns, syns->inv_tau, dr, dr_new);
+    free(dr);
 
-    return dr;
+    return dr_new;
 }
 
 
@@ -637,11 +645,11 @@ double *get_fft(int len, double *x_in)
 }
 
 
-double *get_fft_freq(int len, double fs)
+double *get_fft_freq(int len, double sampling_rate)
 {
     double *freq = (double*) malloc(sizeof(double) * (len/2+1));
     for (int n=0; n<len/2+1; n++){
-        freq[n] = fs * ((double) n) /  ((double) len);
+        freq[n] = sampling_rate * ((double) n) /  ((double) len);
     }
 
     return freq;
@@ -724,6 +732,11 @@ void append_spike(int nstep, int *num_spk, int **t_spk)
 double *linspace(double x0, double x1, int len_x)
 {
     double *x = (double*) malloc(sizeof(double) * len_x);
+    if (len_x == 1){
+        printf("Too few length selected. x is set to %.2f\n", x0);
+        x[0] = x0;
+        return x;
+    }
     for (int n=0; n<len_x; n++){
         x[n] = n*(x1-x0)/(len_x-1)+x0;
     }
@@ -740,10 +753,10 @@ void read_ptr(int num_x, double *x, double **ptr_x)
 }
 
 
-void downsampling(int len, double *y_org, double target_fs, arg_t *new_vars)
+void downsampling(int len, double *y_org, double sample_rate, arg_t *new_vars)
 {
     double fs_org = 1000./_dt;
-    int nskip = fs_org/target_fs;
+    int nskip = fs_org/sample_rate;
     int len_new = len/nskip;
 
     new_vars->len = len_new;
@@ -759,15 +772,15 @@ void downsampling(int len, double *y_org, double target_fs, arg_t *new_vars)
 void get_fft_summary(double *vm, double sample_rate, double t_range[2], arg_t *fft_res)
 {
     // t_range is the ms unit
-    int n0 = t_range[0]*sample_rate/1000.;
+    int n0 = t_range[0]/1000.*sample_rate;
     int len_vm = (t_range[1] - t_range[0])/1000.*sample_rate;
 
     double *yft_tmp = get_fft(len_vm, vm+n0);
     double *freq_tmp = get_fft_freq(len_vm, sample_rate);
 
     int n_cut[2];
-    if (f_cut[1] > fs/2) f_cut[1] = sample_rate/2;
-    for (int n=0; n<2; n++) n_cut[n] = f_cut[n]/fs*len_vm;
+    if (f_cut[1] > sample_rate/2) f_cut[1] = sample_rate/2;
+    for (int n=0; n<2; n++) n_cut[n] = f_cut[n]/sample_rate*len_vm;
 
     int len_new = n_cut[1]-n_cut[0];
     fft_res->len = len_new;
@@ -811,7 +824,7 @@ void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t 
     if (flag == 1) free(targets);
 
     arg_t res_fft;
-    double t_range[2] = {(max_step*_dt)-5000, max_step*_dt};
+    double t_range[2] = {(max_step*_dt)-5000, (max_step-1)*_dt};
     if (t_range[0] < 0) t_range[0] = 0;
     get_fft_summary(summary->vm, fs, t_range, &res_fft);
     summary->num_freqs = res_fft.len;
@@ -904,6 +917,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     } else if (info->type_ntk == PROB) {
         gen_bi_random_ntk_with_type(cell_types, cell_types, info->psyns, info->gsyns, &ntk_syn);
     }
+
     if ((info->t_delay_m == 0) && (info->t_delay_std == 0)){
         type = NO_DELAY;
     } else {
@@ -921,7 +935,6 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     int *bck_types = gen_types(info->num_bck, info->bck_type_ratio);
     init_bi_ntk(info->num_bck, info->num_cells, &ntk_bck);
     gen_bi_random_ntk_with_type(bck_types, cell_types, info->pbck, info->gbck, &ntk_bck);
-    // gen_bi_random_ntk_fixed_indeg(bck_types, info->cell_types, info->pbck, info->gbck, &ntk_bck);
     init_syn_vars(bck_syns, info->num_bck, BACKGROUND, &ntk_bck, info->bck_veq, info->bck_tau, cells->v, cells->ic);
     for (int n=0; n<info->num_bck; n++){
         int tp = bck_types[n];

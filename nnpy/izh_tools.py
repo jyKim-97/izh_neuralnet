@@ -20,6 +20,7 @@ class IzhReader:
             self._read_info()
         self.ts = np.arange(0, self.tmax, self.dt)+self.dt
         self.read_all_data()
+        self.read_summary()
 
     def _read_info_txt(self):
         with open(f'{self.tag}_env.txt', 'r') as fid:
@@ -208,7 +209,7 @@ def draw_single_summary(obj, xlim=None, flim=(5,105), clim=None, vlim=None, titl
     plt.ylim([-0.1, 1.1])
     plt.ylabel(r"$p_{e,fire}$")
     
-    if vlim is None: vlim = (-30, 80)
+    if vlim is None: vlim = (min(obj.vm-10), max(obj.vm+10))
     if xplim is None: xplim = (0, obj.tmax)
     rect_args = [[xlim[0], vlim[0]], xlim[1]-xlim[0], vlim[1]-vlim[0]]
     rect_kwargs = {"edgecolor": "k", "facecolor": "k", "fill":True, "alpha": 0.2, "linewidth":1}
@@ -250,8 +251,11 @@ def draw_single_summary(obj, xlim=None, flim=(5,105), clim=None, vlim=None, titl
 
     plt.axes((0.78, 0.1, 0.15, 0.75))
     plt.yticks([])
-    plt.twinx()
+    plt.xlabel('frequency (Hz)', fontsize=10)
+    plt.xticks(fontsize=8)
+    set_axes(yt)
     
+    plt.twinx()
     nf = np.argmax(obj.yf)
     yl = obj.yf[nf]
     yl = [-0.05*yl, 1.2*yl]
@@ -262,12 +266,11 @@ def draw_single_summary(obj, xlim=None, flim=(5,105), clim=None, vlim=None, titl
     plt.xticks(yt, fontsize=8)
     plt.xlim(flim)
     plt.ylim(yl)
-    
     plt.yticks(fontsize=8)
-    plt.xlabel('frequency (Hz)', fontsize=10)
-    tw = ((obj.tmax-2000)/1000, (obj.tmax-1000)/1000)
+    tw = ((obj.tmax-5000)/1000, obj.tmax/1000)
     plt.ylabel("fft result from %d~%ds"%(tw), fontsize=10)
     
     if title is None:
         title = obj.tag
     plt.suptitle(title)
+    

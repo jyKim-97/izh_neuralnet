@@ -12,10 +12,11 @@ typedef struct _progbar_t {
     int max_step;
     int div;
     struct timeval tic;
+    int id_line;
 
 } progbar_t;
 
-
+void set_progressbar_line(progbar_t *bar, int id_line);
 void init_progressbar(progbar_t *bar, int max_step);
 void progressbar(progbar_t *bar, int nstep);
 double get_dt(struct timeval tic, struct timeval toc);
