@@ -522,7 +522,7 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
         }
     }
 
-    double *dr_new = (double*) malloc_c(sz_d * syns->num_pres);
+    double *dr_new = (double*) malloc_c(sz_d * syns->num_syns);
     vdMul(syns->num_syns, syns->inv_tau, dr, dr_new);
     free(dr);
 
