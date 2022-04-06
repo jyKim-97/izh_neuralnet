@@ -24,11 +24,11 @@ void init_progressbar(progbar_t *bar, int max_step)
         fprintf(stderr, "\n");
     }
 
-    fprintf(stderr, "\033[%dB[", bar->id_line+1);
-    for (int n=0; n<_len_progbar; n++){
-        fprintf(stderr, " ");
-    }
-    fprintf(stderr, "] ( )\033[%dA\r", bar->id_line+1);
+    // fprintf(stderr, "\033[%dB[", bar->id_line+1);
+    // for (int n=0; n<_len_progbar; n++){
+    //     fprintf(stderr, " ");
+    // }
+    // fprintf(stderr, "] ( )\033[%dA\r", bar->id_line+1);
 }
 
 
