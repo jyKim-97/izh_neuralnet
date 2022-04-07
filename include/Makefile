@@ -1,6 +1,6 @@
 # compile static library
 CC = gcc
-CFLAGS = -Wall -O3 -std=c11 -g 
+CFLAGS = -Wall -O3 -std=c11 -g
 LDFLAGS = -lm -fopenmp -lmkl_sequential -lmkl_core -lpthread
 INC = -I${MKLROOT}/include
 LIB = -L${MKLROOT}/lib/intel64/
