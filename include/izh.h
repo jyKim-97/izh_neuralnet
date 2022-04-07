@@ -6,18 +6,18 @@
 
 extern double _dt;
 
+
+
+
 typedef enum _SYN_TYPE {
-    BACKGROUND = 0,
-    NO_DELAY,
-    DELAY,
+
+    BACKGROUND = 0x01 << 0,
+    NO_DELAY = 0x01 << 1,
+    DELAY = 0x01 << 2,
+    STD = 0x01 << 3,
+    STF = 0x01 << 4
+
 } SYN_TYPE;
-
-
-typedef enum _PLASTICITY_TYPE {
-    NONE = 0,
-    STD,
-    STF,
-} PLASTICITY_TYPE;
 
 
 typedef enum _NET_TYPE {
@@ -45,24 +45,21 @@ typedef struct _syn_t {
     int num_pres;
     int num_syns;
     SYN_TYPE type;
-    PLASTICITY_TYPE type_p;
     
     // size = num_syns
     int *id_pre_neuron;
     int *id_post_neuron;
 
-    double *r, **ptr_r;
+    double *r;
     double *veq, *weight;
     double *inv_tau;
+    double **ptr_ipost;
     // short-term plasticity method
     // depression
     double *x, *z; // x+r+z=1
     double *u;
     double tau_r;
     double U, tau_facil;
-
-    double **ptr_vpost;
-    double **ptr_ipost;
     
     // delay parameter
     int *delay;
@@ -97,7 +94,8 @@ typedef struct _network_info_t {
     double tmax;
     double fs; // sampling rate
     double t_delay_m, t_delay_std;
-    PLASTICITY_TYPE type_p;
+
+    SYN_TYPE type;
     NET_TYPE type_ntk;
 
 } network_info_t;
@@ -122,13 +120,12 @@ typedef struct _arg_t {
 void init_random_stream(long int seed);
 void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE][4], int *cell_types);
 void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double cell_veq[], double cell_tau[], double *vpost, double *ipost);
+void check_syn_type(SYN_TYPE types);
 
 void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
-void update_no_delay(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
 
-void add_isyn_bck(syn_t *syns);
-void add_isyn(syn_t *syns);
-void add_isyn_delay(syn_t *syns);
+void add_isyn_bck(syn_t *syns, double *vpost);
+void add_isyn(syn_t *syns, double *vpost);
 
 void update_neurons(neuron_t *cells, int nstep);
 void update_syns_no_delay(syn_t *syns, int *id_fired_pre);

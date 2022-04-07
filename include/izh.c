@@ -98,7 +98,7 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE]
 }
 
 
-void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double cell_veq[], double cell_tau[], double *vpost, double *ipost)
+void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE types, ntk_t *ntk, double cell_veq[], double cell_tau[], double *vpost, double *ipost)
 {
     int num_syns = 0;
     for (int n=0; n<num_pres; n++){
@@ -106,108 +106,79 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE type, ntk_t *ntk, double 
     }
     syns->num_syns = num_syns;
     syns->num_pres = num_pres;
-    syns->type = type;
+
+    check_syn_type(types);
+    syns->type = types;
 
     // create objs
-    if (syns->type == DELAY){
+    if (syns->type & DELAY){
         syns->r = (double*) calloc_c(num_syns, sz_d);
         syns->inv_tau = (double*) malloc_c(sz_d * num_syns);
-        syns->ptr_r = NULL;
-        syns->p_fire = NULL;
         syns->delay = (int*) malloc(sz_i * num_syns);
-        syns->id_exp = (int*) malloc(sz_i * num_syns);
+        syns->id_exp = (int*) calloc(num_syns, sz_i);
+        syns->p_fire = NULL;
 
-        // init
-        for (int n=0; n<num_syns; n++){
-            syns->delay[n] = -1;
-            syns->id_exp[n] = 0;
-        }
+        for (int n=0; n<num_syns; n++) syns->delay[n] = -1;
 
-        if (syns->type_p == 1){
+        if (syns->type & STD){
             syns->x = (double*) malloc_c(sz_d * num_syns);
-            for (int i=0; i<num_syns; i++) { syns->x[i] = 1; }
             syns->z = (double*) calloc_c(num_syns, sz_d);
+            for (int i=0; i<num_syns; i++) syns->x[i] = 1;
         }
-    } else { // NO_DELAY, BACKGROUNS
+    } else {
         syns->r = (double*) calloc_c(num_pres, sz_d);
         syns->inv_tau = (double*) malloc_c(sz_d * num_pres);
-        syns->ptr_r = (double**) malloc(sizeof(double*) * num_syns);
         syns->delay  = NULL;
-
-        if (syns->type == NO_DELAY){
-
-            if (syns->type_p == 1){
-                syns->x = (double*) malloc_c(sz_d * num_pres);
-                for (int i=0; i<num_pres; i++) { syns->x[i] = 1; }
-                syns->z = (double*) calloc_c(num_pres, sz_d);
-            }
+        syns->id_exp = NULL;
+        if (syns->type & NO_DELAY){
             syns->p_fire = NULL;
-        } else {
+            if (syns->type & STD){
+                syns->x = (double*) malloc_c(sz_d * num_pres);
+                syns->z = (double*) calloc_c(num_pres, sz_d);
+                for (int i=0; i<num_pres; i++) { syns->x[i] = 1; }
+            }
+        } else { // background
             syns->p_fire = (double*) malloc(sz_d * num_pres);
             syns->delay = NULL;
-            syns->type_p = NONE;
         }
     }
 
+    syns->veq = (double*) calloc_c(num_pres, sz_d);
     syns->weight = (double*) malloc_c(sz_d * num_syns);
-    syns->veq    = (double*) calloc_c(num_syns, sz_d);
-
-    syns->ptr_vpost = (double**) malloc(sizeof(double*) * num_syns);
-    syns->ptr_ipost = (double**) malloc(sizeof(double*) * num_syns);
-
-    syns->id_pre_neuron  = (int*) malloc(sz_i * num_syns);
+    syns->id_pre_neuron = (int*) malloc(sz_i * num_syns);
     syns->id_post_neuron = (int*) malloc(sz_i * num_syns);
+    syns->ptr_ipost = (double**) malloc(sizeof(double*) * num_syns);
 
     // set varaibles    
     int id_syn = 0;
     for (int n=0; n<num_pres; n++){
+
         int pre_type = ntk->node_types[n];
+        syns->veq[n] = cell_veq[pre_type];
+        if (syns->type ^ DELAY) syns->inv_tau[n] = 1/cell_tau[pre_type];
+
         for (int i=0; i<ntk->num_edges[n]; i++){
-            syns->veq[id_syn] = cell_veq[pre_type];
             syns->weight[id_syn] = ntk->strength[n][i];
 
             int n_post = ntk->adj_list[n][i];
-            syns->ptr_vpost[id_syn] = vpost + n_post;
             syns->ptr_ipost[id_syn] = ipost + n_post;
-
-            syns->id_pre_neuron[id_syn]  = n;
+            syns->id_pre_neuron[id_syn] = n;
             syns->id_post_neuron[id_syn] = n_post;
 
-            if (syns->type == DELAY){
-                syns->inv_tau[id_syn] = 1/cell_tau[pre_type];
-            } else {
-                syns->ptr_r[id_syn] = syns->r + n;
-            }
-
+            if (syns->type & DELAY) syns->inv_tau[id_syn] = 1/cell_tau[pre_type];
             id_syn++;
-        }
-
-        if (syns->type != DELAY){
-            syns->inv_tau[n] = 1/cell_tau[pre_type];
         }
     }
 }
 
 
-void update_no_delay(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns)
-{
-    if (ic == NULL){
-        memset(cells->ic, 0, sz_d*cells->num_cells);
-    } else {
-        memcpy(cells->ic, ic, sz_d*cells->num_cells);
+void check_syn_type(SYN_TYPE types){
+    for (int n=0; n<3; n++){
+        if (types & 0x01<<n){
+            return;
+        }
     }
-
-    int *id_fired_bck = (int*) malloc(sizeof(int) * (bck_syns->num_pres));
-    id_fired_bck[0] = -1;
-    gen_bck_spike(bck_syns, id_fired_bck);
-    update_syns_no_delay(bck_syns, id_fired_bck);
-    add_isyn_bck(bck_syns);
-    free(id_fired_bck);
-
-    update_syns_no_delay(syns, cells->id_fired);
-    add_isyn(syns);
-
-    update_neurons(cells, nstep);
+    printf("Synapse type is not specified! check type = %d\n", types);
 }
 
 
@@ -222,87 +193,59 @@ void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns
     int *id_fired_bck = (int*) malloc(sizeof(int) * (bck_syns->num_pres+1));
     gen_bck_spike(bck_syns, id_fired_bck);
     update_syns_no_delay(bck_syns, id_fired_bck);
-    add_isyn_bck(bck_syns);
+    add_isyn_bck(bck_syns, cells->v);
     free(id_fired_bck);
 
-    if (syns->type==DELAY){
+    if (syns->type & DELAY){
         update_syns_delay(syns, cells);
-        add_isyn_delay(syns);
     } else {
         update_syns_no_delay(syns, cells->id_fired);
-        add_isyn(syns);
     }
+    add_isyn(syns, cells->v);
 
     update_neurons(cells, nstep);
 }
 
 
-void add_isyn_bck(syn_t *syns)
+void add_isyn_bck(syn_t *syns, double *vpost)
 {
     /*** ic -= weight * r * vpost ***/
-    int N = syns->num_syns;
+    int num_bck = syns->num_pres;
 
-    double *rsyns = (double*) malloc_c(sz_d * N);
-    read_ptr(N, rsyns, syns->ptr_r);
-    double *isyn = (double*) malloc_c(sz_d * N);
-    read_ptr(N, isyn, syns->ptr_vpost);
+    double *rv = (double*) malloc_c(sz_d * num_bck);
+    vdMul(num_bck, syns->r, vpost, rv);
 
-    vdMul(N, rsyns, isyn, isyn); // W*r*v
-    vdMul(N, syns->weight, isyn, isyn);
-
-    for (int n=0; n<N; n++){
-        *(syns->ptr_ipost[n]) -= isyn[n];
+    int id = 0;
+    for (int n=syns->num_syns-1; n!=0; n--){
+        *(syns->ptr_ipost[n]) -= syns->weight[n] * rv[id];
     }
 
-    free_c(isyn);
-    free_c(rsyns);
+    free_c(rv);
 }
 
 
-void add_isyn(syn_t *syns)
+void add_isyn(syn_t *syns, double *vpost)
 {
-    /*** ic -= weight * r * (vpost - veq) ***/
-    int N = syns->num_syns;
-    double *isyn = (double*) malloc_c(sz_d * N);
-    read_ptr(N, isyn, syns->ptr_vpost);
-    cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
+    int N = syns->num_pres;
+    double *dv = (double*) malloc_c(sz_d * N);
+    memcpy(dv, vpost, sz_d*N);
+    cblas_daxpy(N, -1, syns->veq, 1., dv, 1); // vpost- veq
 
-    vdMul(N, syns->weight, isyn, isyn);
-    if (syns->type == NO_DELAY){
-        double *rsyns = (double*) malloc_c(sz_d * N);
-        read_ptr(N, rsyns, syns->ptr_r);
-        vdMul(N, rsyns, isyn, isyn);
-        free_c(rsyns);
-    } else if (syns->type == DELAY) {
-        vdMul(N, syns->r, isyn, isyn);
-    } else {
-        printf("Wrong type\n");
+    if (syns->type & NO_DELAY){
+        double *isyn = (double*) malloc_c(sz_d * N);
+        vdMul(N, syns->r, dv, isyn);
+        for (int n=syns->num_syns; n!=0; n--){
+            int id = syns->id_pre_neuron[n];
+            *(syns->ptr_ipost)[n] -= syns->weight[n]*isyn[id];
+        }
+        free_c(isyn);
+    } else if (syns->type & DELAY) {
+        for (int n=syns->num_syns; n!=0; n--){
+            int id = syns->id_pre_neuron[n];
+            *(syns->ptr_ipost)[n] -= syns->weight[n]*syns->r[n]*dv[id];
+        }
     }
-
-    for (int n=0; n<N; n++){
-        *(syns->ptr_ipost)[n] -= isyn[n];
-    }
-
-    free_c(isyn);
-}
-
-
-void add_isyn_delay(syn_t *syns)
-{
-    /*** ic -= weight * (vpost - veq) ***/
-    int N = syns->num_syns;
-
-    double *isyn = (double*) malloc_c(sz_d * N);
-    read_ptr(N, isyn, syns->ptr_vpost);
-    cblas_daxpy(N, -1, syns->veq, 1, isyn, 1);  // vpost - veq
-    vdMul(N, syns->weight, isyn, isyn);
-    vdMul(N, syns->r, isyn, isyn);
-
-    for (int n=0; n<N; n++){
-        *(syns->ptr_ipost)[n] -= isyn[n];
-    }
-
-    free_c(isyn);
+    free_c(dv);
 }
 
 
@@ -342,7 +285,7 @@ void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
     double *dr = solve_deq_using_euler(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
 
-    if (syns->type_p == STD){
+    if (syns->type & STD){
         double *dz = solve_deq_using_euler(f_dz_syns_no_delay, N, syns->z, (void*) syns, NULL);
         cblas_daxpy(N, 1, dz, 1, syns->z, 1);
         cblas_daxpy(N, 1, dr, 1, dz, 1); // dz = dr + dz, dx = -dr
@@ -360,7 +303,7 @@ void update_syns_delay(syn_t *syns, neuron_t *cells)
     double *dr = solve_deq_using_euler(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
 
-    if (syns->type_p == STD){
+    if (syns->type & STD){
         double *dz = solve_deq_using_euler(f_dz_syns_delay, N, syns->z, (void*) syns, NULL);
         cblas_daxpy(N, 1, dz, 1, syns->z, 1);
         cblas_daxpy(N, 1, dr, 1, dz, 1); // dr = dr + dz, dx = -dr
@@ -478,7 +421,7 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 
     int *ptr_id = (int*) arg_fired;
     while (*ptr_id > -1){
-        if (syns->type_p == STD){
+        if (syns->type & STD){
             dr[*ptr_id] += syns->x[*ptr_id]; // dx = deltafn(=1/_dt) * _dt
         } else {
             dr[*ptr_id] += 1; // dx = deltafn(=1/_dt) * _dt
@@ -512,7 +455,7 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
 
         if (*id < n_spk){
             if (nstep - delay - cells->t_fired[id_pre][*id] == 0){
-                if (syns->type_p == STD){
+                if (syns->type & STD){
                     dr[n] += syns->x[n];
                 } else {
                     dr[n] += 1;
@@ -747,9 +690,12 @@ double *linspace(double x0, double x1, int len_x)
 void read_ptr(int num_x, double *x, double **ptr_x)
 {
     // #pragma omp parallel for if (num_x > 1000)
-    for (int n=0; n<num_x; n++){
+    for (int n=num_x-1; n>=0; n--){
         x[n] = *(ptr_x[n]);
     }
+    // for (int n=0; n<num_x; n++){
+    //     x[n] = *(ptr_x[n]);
+    // }
 }
 
 
@@ -871,22 +817,18 @@ void free_syns(syn_t *syns)
 
     free(syns->id_pre_neuron);
     free(syns->id_post_neuron);
-    free(syns->ptr_vpost);
     free(syns->ptr_ipost);
-    
-    if (syns->type == BACKGROUND){
+
+    if (syns->type & BACKGROUND){
         free(syns->p_fire);
-        free(syns->ptr_r);
-    } else {
-        if (syns->type == DELAY){
-            free(syns->delay);
-            free(syns->id_exp);
-        }
-        if (syns->type_p == STD){
-            free(syns->x);
-            free(syns->z);
-        }
-        free(syns->ptr_r);
+    } else if (syns->type & DELAY){
+        free(syns->delay);
+        free(syns->id_exp);
+    }
+
+    if (syns->type & STD){
+        free(syns->x);
+        free(syns->z);
     }
 }
 
@@ -909,8 +851,6 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
     init_cell_vars(cells, info->num_cells, info->cell_params, cell_types);
 
     ntk_t ntk_syn;
-    SYN_TYPE type;
-    syns->type_p = info->type_p;
     init_bi_ntk(info->num_cells, info->num_cells, &ntk_syn);
     if (info->type_ntk == MEAN_DEG){
         gen_bi_random_ntk_mean_deg(cell_types, cell_types, info->mean_degs, info->gsyns, &ntk_syn);
@@ -918,14 +858,9 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
         gen_bi_random_ntk_with_type(cell_types, cell_types, info->psyns, info->gsyns, &ntk_syn);
     }
 
-    if ((info->t_delay_m == 0) && (info->t_delay_std == 0)){
-        type = NO_DELAY;
-    } else {
-        type = DELAY;
-    }
-    init_syn_vars(syns, info->num_cells, type, &ntk_syn,
+    init_syn_vars(syns, info->num_cells, info->type, &ntk_syn,
                         info->syn_veq, info->syn_tau, cells->v, cells->ic);
-    if (type == DELAY){
+    if (info->type == DELAY){
         for (int n=0; n<syns->num_syns; n++){
             syns->delay[n] = genrand64_normal(info->t_delay_m, info->t_delay_std)/_dt;
         }
