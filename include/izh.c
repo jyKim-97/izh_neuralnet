@@ -676,18 +676,6 @@ double *linspace(double x0, double x1, int len_x)
 }
 
 
-void read_ptr(int num_x, double *x, double **ptr_x)
-{
-    // #pragma omp parallel for if (num_x > 1000)
-    for (int n=num_x-1; n>=0; n--){
-        x[n] = *(ptr_x[n]);
-    }
-    // for (int n=0; n<num_x; n++){
-    //     x[n] = *(ptr_x[n]);
-    // }
-}
-
-
 void downsampling(int len, double *y_org, double sample_rate, arg_t *new_vars)
 {
     double fs_org = 1000./_dt;
