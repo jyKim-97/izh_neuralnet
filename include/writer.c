@@ -178,9 +178,9 @@ void write_env(char tag[], network_info_t *info, int num_add, ...){
     json_object_set_number(root_obj, "dt", _dt);
     json_object_set_number(root_obj, "tmax", info->tmax);
     json_object_set_number(root_obj, "fs", info->fs);
+    json_object_set_number(root_obj, "type", info->type);
     json_object_set_number(root_obj, "t_delay_m", info->t_delay_m);
     json_object_set_number(root_obj, "t_delay_s", info->t_delay_std);
-    json_object_set_number(root_obj, "plasticity", info->type_p);
     json_object_set_number(root_obj, "bck_network_type", info->type_ntk);
 
     // read additional parameters

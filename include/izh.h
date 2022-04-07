@@ -10,13 +10,11 @@ extern double _dt;
 
 
 typedef enum _SYN_TYPE {
-
     BACKGROUND = 0x01 << 0,
     NO_DELAY = 0x01 << 1,
     DELAY = 0x01 << 2,
     STD = 0x01 << 3,
     STF = 0x01 << 4
-
 } SYN_TYPE;
 
 
@@ -50,12 +48,12 @@ typedef struct _syn_t {
     int *id_pre_neuron;
     int *id_post_neuron;
 
-    double *r;
-    double *veq, *weight;
+    double *r, *veq;
     double *inv_tau;
-    double **ptr_ipost;
-    // short-term plasticity method
-    // depression
+    double *weight;
+    double **ptr_ipost, **ptr_vpost;
+
+    // short-term plasticity method (depression)
     double *x, *z; // x+r+z=1
     double *u;
     double tau_r;
@@ -124,8 +122,8 @@ void check_syn_type(SYN_TYPE types);
 
 void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns);
 
-void add_isyn_bck(syn_t *syns, double *vpost);
-void add_isyn(syn_t *syns, double *vpost);
+void add_isyn_bck(syn_t *syns);
+void add_isyn(syn_t *syns);
 
 void update_neurons(neuron_t *cells, int nstep);
 void update_syns_no_delay(syn_t *syns, int *id_fired_pre);
