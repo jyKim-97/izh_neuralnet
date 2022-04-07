@@ -212,7 +212,7 @@ void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns
 void add_isyn_bck(syn_t *syns)
 {
     /*** ic -= weight * r * vpost ***/
-    for (int n=syns->num_pres-1; n!=0; n--){
+    for (int n=syns->num_syns-1; n!=0; n--){
         int id = syns->id_pre_neuron[n];
         *(syns->ptr_ipost[n]) -= syns->weight[n] * syns->r[id] * *(syns->ptr_vpost[n]);
     }
