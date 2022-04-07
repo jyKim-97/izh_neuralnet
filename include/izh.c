@@ -152,19 +152,19 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE types, ntk_t *ntk, double
 
     // set varaibles    
     int id_syn = 0;
-    for (int n=0; n<num_pres; n++){
+    for (int n_pre=0; n_pre<num_pres; n_pre++){
 
-        int pre_type = ntk->node_types[n];
-        syns->veq[n] = cell_veq[pre_type];
-        if (syns->type ^ DELAY) syns->inv_tau[n] = 1/cell_tau[pre_type];
+        int pre_type = ntk->node_types[n_pre];
+        syns->veq[n_pre] = cell_veq[pre_type];
+        if (syns->type ^ DELAY) syns->inv_tau[n_pre] = 1/cell_tau[pre_type];
 
-        for (int i=0; i<ntk->num_edges[n]; i++){
-            syns->weight[id_syn] = ntk->strength[n][i];
+        for (int i=0; i<ntk->num_edges[n_pre]; i++){
+            syns->weight[id_syn] = ntk->strength[n_pre][i];
 
-            int n_post = ntk->adj_list[n][i];
+            int n_post = ntk->adj_list[n_pre][i];
             syns->ptr_ipost[id_syn] = ipost + n_post;
             syns->ptr_vpost[id_syn] = vpost + n_post;
-            syns->id_pre_neuron[id_syn] = n;
+            syns->id_pre_neuron[id_syn]  = n_pre;
             syns->id_post_neuron[id_syn] = n_post;
 
             if (syns->type & DELAY) syns->inv_tau[id_syn] = 1/cell_tau[pre_type];
@@ -224,14 +224,14 @@ void add_isyn(syn_t *syns)
     if (syns->type & NO_DELAY){
         for (int n=syns->num_syns-1; n!=0; n--){
             int id = syns->id_pre_neuron[n];
-            double rdv = syns->r[id] * (syns->veq[id] - *(syns->ptr_vpost[n]));
+            double rdv = syns->r[id] * (*(syns->ptr_vpost[n]) - syns->veq[id]);
             *(syns->ptr_ipost[n]) -= syns->weight[n]*rdv;
         }
 
     } else if (syns->type & DELAY){
         for (int n=syns->num_syns-1; n!=0; n--){
             int id = syns->id_pre_neuron[n];
-            double dv = syns->veq[id] - *(syns->ptr_vpost[n]);
+            double dv = *(syns->ptr_vpost[n]) - syns->veq[id];
             *(syns->ptr_ipost[n]) -= syns->weight[n]*syns->r[n]*dv;
         }
     }
