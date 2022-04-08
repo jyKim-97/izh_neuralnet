@@ -25,7 +25,7 @@ void init_multiple_lines(progbar_t *bar)
 
 void end_multiple_lines(progbar_t *bar)
 {
-    for (int n=bar->tot_line-1; n!=0; n--){
+    for (int n=bar->tot_line; n!=0; n--){
         fprintf(stderr, "\n");
     }
 }
