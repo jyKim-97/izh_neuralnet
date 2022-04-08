@@ -116,6 +116,9 @@ def read_byte_data(fname, N):
     return data.reshape([nline, N], order='C').T
 
 
+# def read_n
+
+
 def get_raster_plot(t_spks, cell_types):
     cell_colors = ['#C62828', '#1565C0', '#D68910', '#2ECC71']
     ts = []
@@ -182,7 +185,7 @@ def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s
     return x, y, c
 
 
-def draw_single_summary(obj, xlim=None, flim=(5,105), clim=None, vlim=None, title=None, xplim=None, ha='center'):
+def draw_single_summary(obj, xlim=None, flim=(5,105), clim=None, vlim=None, title=None, xplim=None, ha='center', markersize=1):
     
     from matplotlib.patches import Rectangle
     import nnpy.pyeeg as pyeeg
@@ -197,7 +200,7 @@ def draw_single_summary(obj, xlim=None, flim=(5,105), clim=None, vlim=None, titl
     ax1 = plt.axes((0.1, 0.65, 0.6, 0.2))
     if xlim is None: xlim = (0, obj.tmax)
 
-    draw_raster_plot(obj.t_spks, cell_types=obj.cell_types, xlim=xlim)
+    draw_raster_plot(obj.t_spks, cell_types=obj.cell_types, xlim=xlim, s=markersize)
     plt.xlabel("")
     plt.xlim(xlim)
     plt.ylim([-30, obj.num_cells+30])
