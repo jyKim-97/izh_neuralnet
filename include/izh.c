@@ -418,11 +418,9 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
         ptr_id++;
     }
 
-    double *dr_new = (double*) malloc_c(sz_d * syns->num_pres);
-    vdMul(syns->num_pres, syns->inv_tau, dr, dr_new);
-    free(dr);
+    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
 
-    return dr_new;
+    return dr;
 }
 
 
@@ -795,6 +793,7 @@ void free_syns(syn_t *syns)
     free(syns->id_pre_neuron);
     free(syns->id_post_neuron);
     free(syns->ptr_ipost);
+    free(syns->ptr_vpost);
 
     if (syns->type & BACKGROUND){
         free(syns->p_fire);
