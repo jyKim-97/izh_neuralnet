@@ -227,7 +227,7 @@ void write_ntk(char fname[], syn_t *syns)
 {
     FILE *fp = fopen(fname, "w");
     for (int n=0; n<syns->num_syns; n++){
-        fprintf(fp, "%d,%d,%d,%f,%f\n", n, syns->id_pre_neuron[n], syns->id_post_neuron[n], syns->weight[n], syns->veq[n]);
+        fprintf(fp, "%d,%d,%d,%f\n", n, syns->id_pre_neuron[n], syns->id_post_neuron[n], syns->weight[n]);
     }
     fclose(fp);
 }
