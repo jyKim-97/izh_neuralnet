@@ -277,3 +277,117 @@ def draw_single_summary(obj, xlim=None, flim=(5,105), clim=None, vlim=None, titl
         title = obj.tag
     plt.suptitle(title)
     
+
+### Network tools ###
+def read_graph(graph_name):
+    graph = dict()
+    graph["weight"] = []
+    graph["adj_list"] = []
+    
+    with open(graph_name, "r") as fid:
+        line= fid.readline()
+        while line:
+            _, n_pre, n_post, w, _ = line[:-1].split(",")
+            n_pre, n_post, w = int(n_pre), int(n_post), float(w)
+            if len(graph["adj_list"]) < n_pre+1:
+                graph["adj_list"].append([n_post])
+                graph["weight"].append([w])
+            else:
+                graph["adj_list"][n_pre].append(n_post)
+                graph["weight"][n_pre].append(w)
+            line = fid.readline()
+    return graph
+
+
+def convertGraph2DL(graph, fdl):
+    num_cells = len(graph["adj_list"])
+    
+    with open(fdl, "w") as fid:
+        # write node
+        fid.write("nodedef>name VARCHAR\n")
+        for n in range(num_cells):
+            fid.write("%d\n"%(n))
+        fid.write("edgedef>node1,node2,weight DOUBLE,directed BOOLEAN\n")
+        
+        for n in range(num_cells):
+            for i in range(len(graph["adj_list"][n])):
+                n_post = graph["adj_list"][n][i]
+                w = graph["weight"][n][i]
+                fid.write("%s,%s,%s,true\n"%(n,n_post,w))
+    print("Done\n")
+
+
+def readDL(fdl):
+    graph_viz = {"id":[], "x":[], "y":[], "edge_line":[[],[]], "line_id": []}
+    with open(fdl, "r") as fid:
+        info = fid.readline()
+        line = fid.readline()
+        while "edge" not in line:
+            vals =  line.split(",")
+            graph_viz["id"].append(int(vals[0]))
+            graph_viz["x"].append(float(vals[4]))
+            graph_viz["y"].append(float(vals[5]))
+            line = fid.readline()
+        # read edge info
+        graph_viz["line_id"] = [[-1, 0] for n in range(len(graph_viz["id"]))]
+        
+        line = fid.readline()
+        while line:
+            vals = line.split(",")
+            n1, n2 = int(vals[0]), int(vals[1])
+            ex = [graph_viz["x"][n1], graph_viz["x"][n2], np.nan]
+            ey = [graph_viz["y"][n1], graph_viz["y"][n2], np.nan]
+            
+            n_line = len(graph_viz["edge_line"][0])
+            if graph_viz["line_id"][n1][0] == -1:
+                graph_viz["line_id"][n1][0] = n_line
+            graph_viz["line_id"][n1][1] = n_line+2
+            graph_viz["edge_line"][0].extend(ex)
+            graph_viz["edge_line"][1].extend(ey)
+            line = fid.readline()
+    return graph_viz
+
+
+class SpikeVisu:
+    def __init__(self, obj, tbin=0.1):
+        self.tbin = tbin # ms
+        self.num_cells = obj.num_cells
+        self.id_t = np.zeros(obj.num_cells, dtype=int)
+        self.t = 0
+        self.t_spks = obj.t_spks
+        self.num_spks = [len(t) for t in obj.t_spks]
+        self._set_ctype_cs()
+        
+    def _set_ctype_cs(self):
+        self.colors = [[0.8, 0.2, 0.2], [0.2, 0.2, 0.8]]
+        self.ctypes = []
+        for n in range(self.num_cells):
+            if n < 0.8*self.num_cells:
+                self.ctypes.append(0)
+            else:
+                self.ctypes.append(1)
+    
+    def reset(self):
+        for n in range(self.num_cells):
+            self.id_t[n] = 0
+    
+    def set_time(self, t):
+        self.t = t
+        for n in range(self.num_cells):
+            self.id_t[n] = np.where(np.array(obj.t_spks[n]) < self.t)[0][-1]
+            
+    def __next__(self):
+        self.t += self.tbin
+        cs = np.ones([self.num_cells, 3])
+        act_node = []
+        for n in range(self.num_cells):
+            flag = False
+            while (self.id_t[n]+1 < self.num_spks[n]) and (self.t_spks[n][self.id_t[n]+1] < self.t):
+                self.id_t[n] += 1
+                flag = True
+                
+            if flag:
+                cs[n,:] = self.colors[self.ctypes[n]]
+                act_node.append(n)
+                
+        return cs, act_node
