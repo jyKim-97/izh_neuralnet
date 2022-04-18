@@ -832,6 +832,8 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
         gen_bi_random_ntk_mean_deg(cell_types, cell_types, info->mean_degs, info->gsyns, &ntk_syn);
     } else if (info->type_ntk == PROB) {
         gen_bi_random_ntk_with_type(cell_types, cell_types, info->psyns, info->gsyns, &ntk_syn);
+    } else if (info->type_ntk == FIXED_IN_DEG) {
+        gen_bi_random_ntk_fixed_indeg(cell_types, cell_types, info->mean_degs, info->gsyns, &ntk_syn);
     }
 
     init_syn_vars(syns, info->num_cells, info->type, &ntk_syn,
