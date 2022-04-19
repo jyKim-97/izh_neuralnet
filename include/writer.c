@@ -5,6 +5,10 @@
 #include "writer.h"
 
 
+double fs_write = 2000;
+extern double _dt;
+
+
 void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
 {
     char fname[100];
@@ -28,6 +32,11 @@ void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
         sprintf(fname, "%s_ft_spk.txt", tag);
         fid_obj->ft_spk = open_file(fname, "w");
     }
+
+    fid_obj->nskip = 1000./_dt/fs_write;
+    if (fid_obj->nskip==0) fid_obj->nskip = 1;
+
+    // fid_obj->nskip = fs_write/1000./_dt;
 }
 
 
@@ -53,15 +62,18 @@ void write_summary(char tag[], res_t *simul_result)
 void write_result(writer_t *fid_obj, int nstep, neuron_t *cells)
 {
     int num_cells = cells->num_cells;
-    if (fid_obj->mod & 1){
-        write_data(fid_obj->fv, num_cells, cells->v);
+    if (cells->nstep % fid_obj->nskip == 0){
+        if (fid_obj->mod & 1){
+            write_data(fid_obj->fv, num_cells, cells->v);
+        }
+        if (fid_obj->mod & 2){
+            write_data(fid_obj->fu, num_cells, cells->u);
+        }
+        if (fid_obj->mod & 4){
+            write_data(fid_obj->fi, num_cells, cells->ic);
+        }
     }
-    if (fid_obj->mod & 2){
-        write_data(fid_obj->fu, num_cells, cells->u);
-    }
-    if (fid_obj->mod & 4){
-        write_data(fid_obj->fi, num_cells, cells->ic);
-    }
+
     if (fid_obj->mod & 8){
         write_spike(fid_obj->ft_spk, nstep, cells->id_fired);
     }
