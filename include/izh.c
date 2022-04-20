@@ -271,8 +271,8 @@ void update_neurons(neuron_t *cells, int nstep)
 void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 {   
     int N = syns->num_pres;
-    // double *dr = solve_deq_using_euler(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
-    double *dr = solve_deq_using_rk4(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    double *dr = solve_deq_using_euler(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    // double *dr = solve_deq_using_rk4(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
 
     if (syns->type & STD){
@@ -290,8 +290,8 @@ void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 void update_syns_delay(syn_t *syns, neuron_t *cells)
 {
     int N = syns->num_syns;
-    // double *dr = solve_deq_using_euler(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
-    double *dr = solve_deq_using_rk4(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
+    double *dr = solve_deq_using_euler(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
+    // double *dr = solve_deq_using_rk4(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
 
     if (syns->type & STD){
