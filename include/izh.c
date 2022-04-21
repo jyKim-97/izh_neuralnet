@@ -405,7 +405,7 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 {
     /*** dr/dt = (-r + R\delta) / tau ***/
     syn_t *syns = (syn_t*) arg_syn;
-    double *dr = (double*) malloc_c(sz_d * syns->num_pres);
+    double *dr = (double*) malloc(sz_d * syns->num_pres);
 
     memcpy(dr, r, sz_d*syns->num_pres);
     cblas_dscal(syns->num_pres, -_dt, dr, 1);
@@ -430,7 +430,7 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
 {
     syn_t *syns = (syn_t*) arg_syn;
     neuron_t *cells = (neuron_t*) arg_cell;
-    double *dr = (double*) malloc_c(sz_d * syns->num_syns);
+    double *dr = (double*) malloc(sz_d * syns->num_syns);
 
     memcpy(dr, r, sz_d*syns->num_syns);
     cblas_dscal(syns->num_syns, -_dt, dr, 1);
@@ -440,16 +440,17 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
         int id_pre = syns->id_pre_neuron[n];
         int delay = syns->delay[n];
         int n_spk = cells->num_spk[id_pre];
-        int *id = syns->id_exp+n;
+        int n_exp = syns->id_exp[n];
 
-        if (*id < n_spk){
-            if (nstep - delay - cells->t_fired[id_pre][*id] == 0){
+        if (n_exp < n_spk){
+            int dn = nstep - delay - cells->t_fired[id_pre][n_exp];
+            if (dn == 0){
                 if (syns->type & STD){
                     dr[n] += syns->x[n];
                 } else {
                     dr[n] += 1;
                 }
-                (*id)++;
+                syns->id_exp[n]++;
             }
         }
     }
