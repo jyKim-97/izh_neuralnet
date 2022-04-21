@@ -148,8 +148,8 @@ void set_index_obj(index_t *idxer, int num_index, int max_ind[]){
 
 void next_index(index_t *idxer){
 
-    if (idxer->nstep == idxer->len){
-        printf("Out of range\n");
+    if (idxer->nstep+1 == idxer->len){
+        printf("Index out of range\n");
         return;
     }
 
@@ -174,7 +174,6 @@ void update_index(index_t *idxer, int nstep){
     int div = idxer->len;
     for (int n=0; n<idxer->num_id; n++){
         div /= idxer->id_max[n];
-        printf("%d, div = %d, %d\n", nstep, div, nstep/div);
         idxer->id[n] = nstep / div;
         nstep -= idxer->id[n] * div;
     }
