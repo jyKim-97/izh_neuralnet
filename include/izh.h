@@ -20,7 +20,8 @@ typedef enum _SYN_TYPE {
 
 typedef enum _NET_TYPE {
     MEAN_DEG = 0,
-    PROB
+    PROB,
+    FIXED_IN_DEG
 } NET_TYPE;
 
 

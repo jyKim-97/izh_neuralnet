@@ -19,8 +19,8 @@ class IzhReader:
         else:
             self._read_info()
         self.ts = np.arange(0, self.tmax, self.dt)+self.dt
-        self.read_all_data()
-        self.read_summary()
+        # self.read_all_data()
+        # self.read_summary()
 
     def _read_info_txt(self):
         with open(f'{self.tag}_env.txt', 'r') as fid:
@@ -287,7 +287,7 @@ def read_graph(graph_name):
     with open(graph_name, "r") as fid:
         line= fid.readline()
         while line:
-            _, n_pre, n_post, w, _ = line[:-1].split(",")
+            _, n_pre, n_post, w = line[:-1].split(",")
             n_pre, n_post, w = int(n_pre), int(n_post), float(w)
             if len(graph["adj_list"]) < n_pre+1:
                 graph["adj_list"].append([n_post])

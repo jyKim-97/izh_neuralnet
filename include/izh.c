@@ -272,6 +272,7 @@ void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 {   
     int N = syns->num_pres;
     double *dr = solve_deq_using_euler(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    // double *dr = solve_deq_using_rk4(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
 
     if (syns->type & STD){
@@ -290,6 +291,7 @@ void update_syns_delay(syn_t *syns, neuron_t *cells)
 {
     int N = syns->num_syns;
     double *dr = solve_deq_using_euler(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
+    // double *dr = solve_deq_using_rk4(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
 
     if (syns->type & STD){
@@ -403,7 +405,7 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
 {
     /*** dr/dt = (-r + R\delta) / tau ***/
     syn_t *syns = (syn_t*) arg_syn;
-    double *dr = (double*) malloc_c(sz_d * syns->num_pres);
+    double *dr = (double*) malloc(sz_d * syns->num_pres);
 
     memcpy(dr, r, sz_d*syns->num_pres);
     cblas_dscal(syns->num_pres, -_dt, dr, 1);
@@ -418,11 +420,9 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
         ptr_id++;
     }
 
-    double *dr_new = (double*) malloc_c(sz_d * syns->num_pres);
-    vdMul(syns->num_pres, syns->inv_tau, dr, dr_new);
-    free(dr);
+    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
 
-    return dr_new;
+    return dr;
 }
 
 
@@ -430,7 +430,7 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
 {
     syn_t *syns = (syn_t*) arg_syn;
     neuron_t *cells = (neuron_t*) arg_cell;
-    double *dr = (double*) malloc_c(sz_d * syns->num_syns);
+    double *dr = (double*) malloc(sz_d * syns->num_syns);
 
     memcpy(dr, r, sz_d*syns->num_syns);
     cblas_dscal(syns->num_syns, -_dt, dr, 1);
@@ -440,16 +440,17 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
         int id_pre = syns->id_pre_neuron[n];
         int delay = syns->delay[n];
         int n_spk = cells->num_spk[id_pre];
-        int *id = syns->id_exp+n;
+        int n_exp = syns->id_exp[n];
 
-        if (*id < n_spk){
-            if (nstep - delay - cells->t_fired[id_pre][*id] == 0){
+        if (n_exp < n_spk){
+            int dn = nstep - delay - cells->t_fired[id_pre][n_exp];
+            if (dn == 0){
                 if (syns->type & STD){
                     dr[n] += syns->x[n];
                 } else {
                     dr[n] += 1;
                 }
-                (*id)++;
+                syns->id_exp[n]++;
             }
         }
     }
@@ -795,6 +796,7 @@ void free_syns(syn_t *syns)
     free(syns->id_pre_neuron);
     free(syns->id_post_neuron);
     free(syns->ptr_ipost);
+    free(syns->ptr_vpost);
 
     if (syns->type & BACKGROUND){
         free(syns->p_fire);
@@ -833,6 +835,8 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
         gen_bi_random_ntk_mean_deg(cell_types, cell_types, info->mean_degs, info->gsyns, &ntk_syn);
     } else if (info->type_ntk == PROB) {
         gen_bi_random_ntk_with_type(cell_types, cell_types, info->psyns, info->gsyns, &ntk_syn);
+    } else if (info->type_ntk == FIXED_IN_DEG) {
+        gen_bi_random_ntk_fixed_indeg(cell_types, cell_types, info->mean_degs, info->gsyns, &ntk_syn);
     }
 
     init_syn_vars(syns, info->num_cells, info->type, &ntk_syn,

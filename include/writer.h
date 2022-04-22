@@ -23,7 +23,8 @@ typedef struct _writer_t
     FILE *ft_spk;
     WRITER_VAR mod;
     char tag[50];
-
+    int nskip;
+    
 } writer_t;
 
 void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod);

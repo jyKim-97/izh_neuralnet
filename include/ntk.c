@@ -136,7 +136,7 @@ void gen_bi_random_ntk_with_type(int *pre_node_types, int *post_node_types,
 
 
 void gen_bi_random_ntk_fixed_indeg(int *pre_node_types, int *post_node_types,
-                                double p_cnt_type[MAX_TYPE][MAX_TYPE],
+                                int mean_out_deg[MAX_TYPE][MAX_TYPE],
                                 double str_cnt_type[MAX_TYPE][MAX_TYPE], ntk_t *ntk)
 {
     memcpy(ntk->node_types, pre_node_types, ntk->num_pre * sizeof(int));
@@ -163,7 +163,7 @@ void gen_bi_random_ntk_fixed_indeg(int *pre_node_types, int *post_node_types,
     for (int i=0; i<ntk->num_post; i++){
         post_tp = post_node_types[i];
         for (int pre_tp=0; pre_tp<MAX_TYPE; pre_tp++){
-            num_in_deg = p_cnt_type[pre_tp][post_tp] * num_types[pre_tp];
+            num_in_deg = (double) mean_out_deg[pre_tp][post_tp] * num_types[pre_tp] / num_types[post_tp];
             memset(used, 0, ntk->num_pre * sizeof(int));
 
             int pre_id, j=0, a=id_boundary[pre_tp], num=num_types[pre_tp];

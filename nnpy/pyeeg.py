@@ -91,6 +91,8 @@ def get_fft(x, fs, wbin=None, wbin_t=None):
         N = len(x)
     elif wbin_t is not None:
         N = int(wbin_t*fs)
+    elif wbin is not None:
+        N = wbin
 
     yf = np.fft.fft(x, axis=0, n=N)
     yf = 2/N * np.abs(yf[:N//2])
