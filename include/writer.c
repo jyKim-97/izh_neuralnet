@@ -265,21 +265,24 @@ void write_array_i(JSON_Object *root_obj, char arr_name[], int arr1d[], int narr
 }
 
 
-void end_writer(writer_t *fid_obj)
+void end_writer(writer_t *fid_obj, neuron_t *cells)
 {
     int mod = fid_obj->mod;
     
-    if (mod & 1){
+    if (mod & V_ONLY){
         close_file(fid_obj->fv);
     }   
-    if (mod & 2){
+    if (mod & U_ONLY){
         close_file(fid_obj->fu);
     }
-    if (mod & 4){
+    if (mod & I_ONLY){
         close_file(fid_obj->fi);
     }
-    if (mod & 8){
+    if (mod & SPK_ONLY){
         close_file(fid_obj->ft_spk);
+    }
+    if (mod & SPK_DAT){
+        write_spike_dat(fid_obj, cells);
     }
 }
 
