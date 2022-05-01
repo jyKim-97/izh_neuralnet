@@ -37,7 +37,7 @@ void write_data(FILE *fp, int num_x, double *x);
 void write_spike(FILE *fp, int nstep, int *t_spk);
 void write_spike_dat(writer_t *fid_obj, neuron_t *cells);
 FILE *open_file(char fname[], char *type);
-void end_writer(writer_t *fid_obj);
+void end_writer(writer_t *fid_obj, neuron_t *cells);
 void close_file(FILE *fid);
 int is_opened(writer_t *fid_obj, int mod);
 void write_array_d(JSON_Object *root_obj, char arr_name[], double arr1d[], int narr);

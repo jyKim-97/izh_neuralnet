@@ -1,7 +1,7 @@
 #ifndef _NTK
 #define _NTK
 
-#define _ntk_block_size 500
+#define _ntk_block_size 1000
 #define MAX_TYPE 6
 
 typedef struct _ntk_t {

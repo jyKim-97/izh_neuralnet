@@ -218,9 +218,13 @@ void append_node(int node_id, int *n_edge, int **adj_list)
 void append_value(double val, int *n_edge, double **val_list)
 {
     // adj_list: pointer of the n th adj list
+    // fprintf(stderr, "%d, %d, %d -> ", *n_edge, (*n_edge+1)%_ntk_block_size, _ntk_block_size);
     if ((*n_edge > 0) && ((*n_edge)%_ntk_block_size == 0)){ // increase the size
-        *val_list = (double*) realloc(*val_list, *n_edge + _ntk_block_size);
+        *val_list = (double*) realloc(*val_list, (*n_edge+_ntk_block_size+1)*sizeof(double));
+        // invalid size (unsorted?????)
     }
+    // fprintf(stderr, "1 ->");
     (*val_list)[*n_edge] = val;
     (*n_edge)++;
+    // fprintf(stderr, "Done\n");
 }
