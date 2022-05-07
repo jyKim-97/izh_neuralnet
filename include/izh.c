@@ -90,8 +90,8 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE]
     for (int n=0; n<num_cells; n++){
         cells->t_fired[n] = (int*) malloc(sz_i * _block_size);
         cells->t_fired[n][0] = -1;
-        cells->id_fired[n] = -1;
     }
+    cells->id_fired[0] = -1;
 
     cells->types = (int*) malloc(sizeof(int) * num_cells);
     memcpy(cells->types, cell_types, sizeof(int) * num_cells);
@@ -417,12 +417,15 @@ double *f_dr_syns_no_delay(double *r, void *arg_syn, void *arg_fired)
         } else {
             dr[*ptr_id] += 1; // dx = deltafn(=1/_dt) * _dt
         }
+
         ptr_id++;
     }
 
-    vdMul(syns->num_pres, syns->inv_tau, dr, dr);
+    double *dr_new = (double*) malloc_c(sz_d * syns->num_pres);
+    vdMul(syns->num_pres, syns->inv_tau, dr, dr_new);
+    free(dr);
 
-    return dr;
+    return dr_new;
 }
 
 
@@ -430,7 +433,7 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
 {
     syn_t *syns = (syn_t*) arg_syn;
     neuron_t *cells = (neuron_t*) arg_cell;
-    double *dr = (double*) malloc(sz_d * syns->num_syns);
+    double *dr = (double*) malloc_c(sz_d * syns->num_syns);
 
     memcpy(dr, r, sz_d*syns->num_syns);
     cblas_dscal(syns->num_syns, -_dt, dr, 1);
