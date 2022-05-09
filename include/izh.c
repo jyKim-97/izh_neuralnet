@@ -669,7 +669,7 @@ double *linspace(double x0, double x1, int len_x)
 {
     double *x = (double*) malloc(sizeof(double) * len_x);
     if (len_x == 1){
-        printf("Too few length selected. x is set to %.2f\n", x0);
+        // printf("Too few length selected. x is set to %.2f\n", x0);
         x[0] = x0;
         return x;
     }
