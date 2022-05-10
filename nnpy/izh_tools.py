@@ -15,23 +15,22 @@ class IzhReader:
         self.t_spks = None
         
         if os.path.isfile(f'{self.tag}_env.txt'):
-            self._read_info_txt()
+            self.read_info_txt(self.tag)
+        elif os.path.isfile(f'{self.tag}_env.json'):
+            self.read_info(self.tag)
         else:
-            self._read_info()
-        self.ts = np.arange(0, self.tmax, self.dt)+self.dt
-        # self.read_all_data()
-        # self.read_summary()
+            print(f"{self.tag} environment file does not exist, read another env tag file with 'read_info'")
 
-    def _read_info_txt(self):
-        with open(f'{self.tag}_env.txt', 'r') as fid:
+    def read_info_txt(self, tag):
+        with open(f'{tag}_env.txt', 'r') as fid:
             self.num_cells = int(fid.readline().split('=')[1][:-1])
             self.num_bck = int(fid.readline().split('=')[1][:-1])
             self.tmax = float(fid.readline().split('=')[1][:-1])
             self.dt = float(fid.readline().split('=')[1][:-1])
             self.cell_types = [int(i) for i in fid.readline().split(",")[:-1]]
 
-    def _read_info(self):
-        with open(f'{self.tag}_env.json', 'r') as fid:
+    def read_info(self, tag):
+        with open(f'{tag}_env.json', 'r') as fid:
             self.info = json.load(fid)
             self.num_cells = self.info["num_cells"]
             self.num_bck = self.info["num_bck"]
@@ -60,6 +59,8 @@ class IzhReader:
             self.read_tspk_dat()
         elif os.path.isfile(self.tag+"_ft_spk.txt"):
             self.read_tspk()
+
+        self.read_summary()
 
     def read_dat(self, varname, fname):
         x = read_byte_data(f"{self.tag}_%s.dat"%(fname), self.num_cells)      
