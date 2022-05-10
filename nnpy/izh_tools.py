@@ -6,7 +6,7 @@ import os
 
 
 class IzhReader:
-    def __init__(self, tag):
+    def __init__(self, tag, env_fname=None):
         self.tag = tag
         self.vs = None
         self.us = None
@@ -14,23 +14,27 @@ class IzhReader:
         self.ics = None
         self.t_spks = None
         
-        if os.path.isfile(f'{self.tag}_env.txt'):
-            self.read_info_txt(self.tag)
-        elif os.path.isfile(f'{self.tag}_env.json'):
-            self.read_info(self.tag)
+        if env_fname is not None:
+            self.read_info(env_fname)
         else:
-            print(f"{self.tag} environment file does not exist, read another env tag file with 'read_info'")
+            fname = f'{self.tag}_env'
+            if os.path.isfile(fname+".txt"):
+                self.read_info_txt(fname+".txt")
+            elif os.path.isfile(fname+".json"):
+                self.read_info(fname+".json")
+            else:
+                print(f"{self.tag} environment file does not exist, read another env tag file with read_info()")
 
-    def read_info_txt(self, tag):
-        with open(f'{tag}_env.txt', 'r') as fid:
+    def read_info_txt(self, fname):
+        with open(fname, 'r') as fid:
             self.num_cells = int(fid.readline().split('=')[1][:-1])
             self.num_bck = int(fid.readline().split('=')[1][:-1])
             self.tmax = float(fid.readline().split('=')[1][:-1])
             self.dt = float(fid.readline().split('=')[1][:-1])
             self.cell_types = [int(i) for i in fid.readline().split(",")[:-1]]
 
-    def read_info(self, tag):
-        with open(f'{tag}_env.json', 'r') as fid:
+    def read_info(self, fname):
+        with open(fname, 'r') as fid:
             self.info = json.load(fid)
             self.num_cells = self.info["num_cells"]
             self.num_bck = self.info["num_bck"]
