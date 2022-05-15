@@ -7,7 +7,7 @@ LIB = -L${MKLROOT}/lib/intel64/
 
 TARGET = ../lib/libizh_neuralnet.a
 
-SRCS = izh.c mt64.c parson.c utils.c ntk.c writer.c
+SRCS = izh.c mt64.c mpifor.c parson.c utils.c ntk.c writer.c
 OBJS = $(SRCS:.c=.o)
 
 .PHONY: clean
