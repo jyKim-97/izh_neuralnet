@@ -65,6 +65,7 @@ class IzhReader:
             self.read_tspk()
 
         self.read_summary()
+        self.ts = np.arange(0, self.tmax, self.dt)
 
     def read_dat(self, varname, fname):
         x = read_byte_data(f"{self.tag}_%s.dat"%(fname), self.num_cells)      
@@ -141,7 +142,7 @@ def get_raster_plot(t_spks, cell_types):
 
 def get_spike_hist(obj, tbin=5):
     num_exc = int(obj.num_cells * 0.8)
-    edges = np.arange(0, obj.ts[-1]+tbin/2, tbin)
+    edges = np.arange(0, obj.tmax, tbin)
     t_spks_vec = np.zeros(len(edges)-1)
     for n in range(num_exc):
         bins, _ = np.histogram(obj.t_spks[n], edges)
