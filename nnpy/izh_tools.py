@@ -405,4 +405,4 @@ def imshow_xy(im, x=None, y=None, cmap="jet", **kwargs):
     if y is None:
         y = np.arange(im.shape[0])
     xy = (x[0], x[-1], y[0], y[-1])
-    plt.imshow(im, extent=xy, origin="lower", aspect="auto", cmap=cmap, **kwargs)
+    return plt.imshow(im, extent=xy, origin="lower", aspect="auto", cmap=cmap, **kwargs)
