@@ -33,10 +33,12 @@ void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
         fid_obj->ft_spk = open_file(fname, "w");
     }
 
-    fid_obj->nskip = 1000./_dt/fs_write;
-    if (fid_obj->nskip==0) fid_obj->nskip = 1;
-
-    // fid_obj->nskip = fs_write/1000./_dt;
+    if (fs_write == -1){
+        fid_obj->nskip = 1;
+    } else {
+        fid_obj->nskip = 1000./_dt/fs_write;
+        if (fid_obj->nskip==0) fid_obj->nskip = 1;
+    }
 }
 
 
