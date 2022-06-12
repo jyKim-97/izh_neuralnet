@@ -121,6 +121,7 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE types, ntk_t *ntk, double
         for (int n=0; n<num_syns; n++) syns->delay[n] = -1;
 
         if (syns->type & STD){
+            syns->tau_r = 100;
             syns->x = (double*) malloc_c(sz_d * num_syns);
             syns->z = (double*) calloc_c(num_syns, sz_d);
             for (int i=0; i<num_syns; i++) syns->x[i] = 1;
@@ -133,6 +134,7 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE types, ntk_t *ntk, double
         if (syns->type & NO_DELAY){
             syns->p_fire = NULL;
             if (syns->type & STD){
+                syns->tau_r = 100;
                 syns->x = (double*) malloc_c(sz_d * num_pres);
                 syns->z = (double*) calloc_c(num_pres, sz_d);
                 for (int i=0; i<num_pres; i++) { syns->x[i] = 1; }
@@ -450,6 +452,7 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
             if (dn == 0){
                 if (syns->type & STD){
                     dr[n] += syns->x[n];
+                    // dr[n] += 1;
                 } else {
                     dr[n] += 1;
                 }
@@ -844,7 +847,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
 
     init_syn_vars(syns, info->num_cells, info->type, &ntk_syn,
                         info->syn_veq, info->syn_tau, cells->v, cells->ic);
-    if (info->type == DELAY){
+    if (info->type & DELAY){
         for (int n=0; n<syns->num_syns; n++){
             syns->delay[n] = genrand64_normal(info->t_delay_m, info->t_delay_std)/_dt;
         }
