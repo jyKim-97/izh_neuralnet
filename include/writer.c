@@ -11,7 +11,7 @@ extern double _dt;
 
 void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
 {
-    char fname[100];
+    char fname[500];
 
     fid_obj->mod = mod;
     strcpy(fid_obj->tag, tag);
@@ -44,7 +44,7 @@ void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
 
 void write_summary(char tag[], res_t *simul_result)
 {
-    char fname[150];
+    char fname[500];
     sprintf(fname, "%s_summary.info", tag);
     FILE *fp = fopen(fname, "w");
     fprintf(fp, "num_times=%d,num_freqs=%d", simul_result->num_times, simul_result->num_freqs);
@@ -97,7 +97,7 @@ FILE *open_file(char fname[], char *type)
     FILE *fid = fopen(fname, type);
     if (fid == NULL){
         // printf();
-        char err_msg[150];
+        char err_msg[600];
         sprintf(err_msg, "File %s is not openned", fname);
         perror(err_msg);
     }
@@ -134,7 +134,7 @@ void write_spike_dat(writer_t *fid_obj, neuron_t *cells)
 {
     int N = cells->num_cells;
 
-    char fname[100];
+    char fname[500];
     sprintf(fname, "%s_ft_spk.info", fid_obj->tag);
     FILE *fp = fopen(fname, "w");
 

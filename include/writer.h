@@ -22,7 +22,7 @@ typedef struct _writer_t
     FILE *fi;
     FILE *ft_spk;
     WRITER_VAR mod;
-    char tag[50];
+    char tag[200];
     int nskip;
     
 } writer_t;
