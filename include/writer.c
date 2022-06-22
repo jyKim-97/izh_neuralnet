@@ -42,6 +42,11 @@ void init_writer(writer_t *fid_obj, char tag[], WRITER_VAR mod)
 }
 
 
+void set_sample_rate(double fs_new){
+    fs_write = fs_new;
+}
+
+
 void write_summary(char tag[], res_t *simul_result)
 {
     char fname[500];
