@@ -33,7 +33,7 @@
 #endif
 
 #define PI 3.14159265359
-#define _block_size 500
+#define _block_size 2000
 VSLStreamStatePtr rand_stream;
 
 
@@ -511,22 +511,23 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
 
     double *sum_real = (double*) calloc(len, sz_d);
     double *sum_imag = (double*) calloc(len, sz_d);
+    
     int N = 0;
-
     for (int n=0; n<num_cells; n++){
         if ((is_target != NULL) && (is_target[n] == 0)){
             continue;
         }
         N++;
-
-        double *phase = (double*) malloc(sz_d * len);
-        get_spike_phase(cells->num_spk[n], len, cells->t_fired[n], phase);
-
-        double *tmp_real = (double*) malloc(sz_d * len);
-        double *tmp_imag = (double*) malloc(sz_d * len);
+        
+        // 이것만 해도 돌아감 왜? (condition: seed n*10 + 5000, n=[10, 100))
+        // cells->t_fired[n][cells->num_spk[n]] = -1;
+        double *phase = get_spike_phase(cells->num_spk[n], len, cells->t_fired[n]);
+        double *tmp_real = (double*) calloc(len, sz_d);
+        double *tmp_imag = (double*) calloc(len, sz_d);
+        // 왜 vdCos에 calloc이 필요한가? (malloc 에러남)
 
         vdCos(len, phase, tmp_real);
-        vdSin(len, phase, tmp_imag);
+        vdSin(len, phase, tmp_imag); // 같이 쓰면 터짐
 
         vdAdd(len, tmp_real, sum_real, sum_real);
         vdAdd(len, tmp_imag, sum_imag, sum_imag);
@@ -595,37 +596,37 @@ double *get_fft_freq(int len, double sampling_rate)
 }
 
 
-void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase)
+double *get_spike_phase(int n_spk, int nmax, int *nsteps)
 {
-    int i, *n0, *n1, tmp=0;
+    // memset(phase, 0, sizeof(double) * nmax);
+    double *phase = (double*) calloc(nmax, sz_d);
 
-    memset(phase, 0, sizeof(double) * nmax);
-
-    if (n_spk == 0){
-        return;
+    if (n_spk < 2){
+        return phase;
     }
 
-    n0 = &tmp;
-    n1 = nsteps;
+    int *n0 = NULL;
+    int *n1 = nsteps;
     int n_skip = t_skip_phs/_dt;
     n_spk--;
 
-    for (i=0; i<nmax; i++){
+    for (int i=0; i<nmax; i++){
         if (i == *n1) {
             if (n_spk == 0){
-                return;
+                break;
             }
             n0 = n1;
             n1++;
             n_spk--;
         }
         
-        if (*n1-*n0 < n_skip){
-            phase[i] = 0;
-        } else {
-            phase[i] = 2*PI * (i - *n0)/(*n1 - *n0);
+        if (n0 == NULL) continue;
+        if (*n1 - *n0 > n_skip){
+            phase[i] = 2*PI * (i - *n0)/((double)(*n1 - *n0));
         }
     }
+
+    return phase;
 }
 
 
@@ -724,6 +725,11 @@ void get_fft_summary(double *vm, double sample_rate, double t_range[2], arg_t *f
 }
 
 
+void set_summary_rate(double fs_new){
+    fs = fs_new;
+}
+
+
 void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t *summary)
 {
     // downsampling
@@ -736,13 +742,13 @@ void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t 
     arg_t res_rk;
     double *rk_tmp, *psi_tmp;
     rk_tmp = (double*) malloc(sz_d * max_step);
+    // rk_tmp = (double*) calloc(max_step, sz_d);
     psi_tmp = (double*) malloc(sz_d * max_step);
     int flag=0;
     if (targets == NULL){
         targets = (int*) calloc(cells->num_cells, sizeof(int));
-        for (int n=0; n<cells->num_cells; n++){
-            if (cells->types[n] == 0) targets[n] = 1;
-        }
+        // if (cells->types[n] == 0) targets[n] = 1;
+        for (int n=0; n<cells->num_cells; n++){  targets[n] = 1; }
         flag = 1;
     }
     get_Kuramoto_order_params(max_step, cells, targets, rk_tmp, psi_tmp);
@@ -761,6 +767,7 @@ void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t 
     summary->freq = res_fft.x;
     summary->yf = res_fft.y;
 }
+
 
 
 void free_summary(res_t *summary)

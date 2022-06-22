@@ -142,10 +142,11 @@ double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double 
 void append_spike(int nstep, int *num_spk, int **t_spk);
 double get_avg(int num_x, double *x, int *is_target);
 void reset_spike(neuron_t *cells);
+void set_summary_rate(double fs_new);
 
 // mathematical functions
 void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double *rK, double *psiK);
-void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase);
+double *get_spike_phase(int n_spk, int nmax, int *nsteps);
 double *get_fft(int len, double *x_in);
 double *get_fft_freq(int len, double fs);
 void get_fft_summary(double *vm, double sample_rate, double t_range[2], arg_t *fft_res);
