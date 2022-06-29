@@ -83,10 +83,24 @@ class IzhReader:
 
     def read_tspk_dat(self):
         with open(self.tag+"_ft_spk.info", "r") as fp:
-            self.num_spks = [int(n) for n in fp.readline().split(",")[:-1]]
+            tmp_vals = [n for n in fp.readline().split(",")[:-1]]
+            self.num_spks = np.zeros(len(tmp_vals), dtype=int)
+            for n, val in enumerate(tmp_vals):
+                if val == '':
+                    val = -1
+                self.num_spks[n] = int(val)
         
         with open(self.tag+"_ft_spk.dat", "rb") as fp:
             t_spks_flat = np.fromfile(fp, dtype=np.int32)*self.dt
+        
+        id_skip = self.num_spks[n] == -1
+        if np.sum(id_skip) == 1:
+            self.num_spks[id_skip] = len(t_spks_flat) - np.sum(self.num_spks) - 1
+
+        elif np.sum(id_skip) > 1:
+            print("Too many skipped spkie data")
+            return
+
         # align t_spks
         n0 = 0
         self.t_spks = []
