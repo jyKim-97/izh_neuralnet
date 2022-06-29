@@ -22,7 +22,7 @@ typedef struct _writer_t
     FILE *fi;
     FILE *ft_spk;
     WRITER_VAR mod;
-    char tag[50];
+    char tag[200];
     int nskip;
     
 } writer_t;
@@ -42,5 +42,6 @@ void close_file(FILE *fid);
 int is_opened(writer_t *fid_obj, int mod);
 void write_array_d(JSON_Object *root_obj, char arr_name[], double arr1d[], int narr);
 void write_array_i(JSON_Object *root_obj, char arr_name[], int arr1d[], int narr);
+void set_sample_rate(double fs_new);
 
 #endif

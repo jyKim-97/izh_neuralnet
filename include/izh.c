@@ -33,7 +33,7 @@
 #endif
 
 #define PI 3.14159265359
-#define _block_size 500
+#define _block_size 2000
 VSLStreamStatePtr rand_stream;
 
 
@@ -121,6 +121,7 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE types, ntk_t *ntk, double
         for (int n=0; n<num_syns; n++) syns->delay[n] = -1;
 
         if (syns->type & STD){
+            syns->tau_r = 100;
             syns->x = (double*) malloc_c(sz_d * num_syns);
             syns->z = (double*) calloc_c(num_syns, sz_d);
             for (int i=0; i<num_syns; i++) syns->x[i] = 1;
@@ -133,6 +134,7 @@ void init_syn_vars(syn_t *syns, int num_pres, SYN_TYPE types, ntk_t *ntk, double
         if (syns->type & NO_DELAY){
             syns->p_fire = NULL;
             if (syns->type & STD){
+                syns->tau_r = 100;
                 syns->x = (double*) malloc_c(sz_d * num_pres);
                 syns->z = (double*) calloc_c(num_pres, sz_d);
                 for (int i=0; i<num_pres; i++) { syns->x[i] = 1; }
@@ -450,6 +452,7 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
             if (dn == 0){
                 if (syns->type & STD){
                     dr[n] += syns->x[n];
+                    // dr[n] += 1;
                 } else {
                     dr[n] += 1;
                 }
@@ -508,22 +511,31 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
 
     double *sum_real = (double*) calloc(len, sz_d);
     double *sum_imag = (double*) calloc(len, sz_d);
+    
     int N = 0;
-
     for (int n=0; n<num_cells; n++){
         if ((is_target != NULL) && (is_target[n] == 0)){
             continue;
         }
+        // N++;
+        
+        
+        // 이것만 해도 돌아감 왜? (condition: seed n*10 + 5000, n=[10, 100))
+        // cells->t_fired[n][cells->num_spk[n]] = -1;
+        int status_no_spike;
+        double *phase = get_spike_phase(cells->num_spk[n], len, cells->t_fired[n], &status_no_spike);
+        if (status_no_spike == 1){
+            free(phase);
+            continue;
+        }
+
         N++;
-
-        double *phase = (double*) malloc(sz_d * len);
-        get_spike_phase(cells->num_spk[n], len, cells->t_fired[n], phase);
-
-        double *tmp_real = (double*) malloc(sz_d * len);
-        double *tmp_imag = (double*) malloc(sz_d * len);
+        double *tmp_real = (double*) calloc(len, sz_d);
+        double *tmp_imag = (double*) calloc(len, sz_d);
+        // 왜 vdCos에 calloc이 필요한가? (malloc 에러남)
 
         vdCos(len, phase, tmp_real);
-        vdSin(len, phase, tmp_imag);
+        vdSin(len, phase, tmp_imag); // 같이 쓰면 터짐
 
         vdAdd(len, tmp_real, sum_real, sum_real);
         vdAdd(len, tmp_imag, sum_imag, sum_imag);
@@ -531,6 +543,16 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
         free(phase);
         free(tmp_real);
         free(tmp_imag);
+    }
+
+    if (N < 2){
+        for (int i=0; i<len; i++){
+            psiK[i] = -1;
+            rK[i] = -1;
+        }
+        free(sum_real);
+        free(sum_imag);
+        return;
     }
 
     cblas_dscal(len, 1./N, sum_real, 1);
@@ -592,37 +614,38 @@ double *get_fft_freq(int len, double sampling_rate)
 }
 
 
-void get_spike_phase(int n_spk, int nmax, int *nsteps, double *phase)
+double *get_spike_phase(int n_spk, int nmax, int *nsteps, int *status_no_spike)
 {
-    int i, *n0, *n1, tmp=0;
+    *status_no_spike = 0;
+    double *phase = (double*) calloc(nmax, sz_d);
 
-    memset(phase, 0, sizeof(double) * nmax);
-
-    if (n_spk == 0){
-        return;
+    if (n_spk < 2){
+        *status_no_spike = 1;
+        return phase;
     }
 
-    n0 = &tmp;
-    n1 = nsteps;
+    int *n0 = NULL;
+    int *n1 = nsteps;
     int n_skip = t_skip_phs/_dt;
     n_spk--;
 
-    for (i=0; i<nmax; i++){
+    for (int i=0; i<nmax; i++){
         if (i == *n1) {
             if (n_spk == 0){
-                return;
+                break;
             }
             n0 = n1;
             n1++;
             n_spk--;
         }
         
-        if (*n1-*n0 < n_skip){
-            phase[i] = 0;
-        } else {
-            phase[i] = 2*PI * (i - *n0)/(*n1 - *n0);
+        if (n0 == NULL) continue;
+        if (*n1 - *n0 > n_skip){
+            phase[i] = 2*PI * (i - *n0)/((double)(*n1 - *n0));
         }
     }
+
+    return phase;
 }
 
 
@@ -658,8 +681,16 @@ void append_spike(int nstep, int *num_spk, int **t_spk)
 {
     (*t_spk)[*num_spk] = nstep;
     (*num_spk)++;
+
+    // printf("append spike\n");
+
     if (((*num_spk) % _block_size == 0) && (*num_spk > 0)){
+        int *tmp = *t_spk;
         *t_spk = (int*) realloc(*t_spk, (*num_spk + _block_size) * sz_d);
+        // printf("resize spike address %p -> %p\n", tmp, *t_spk);
+        if (t_spk == NULL){
+            fprintf(stderr, "There is some error in realloc while sizing %d -> %d\n", *num_spk, *num_spk+_block_size);
+        }
     }
     (*t_spk)[*num_spk] = -1;
 }
@@ -721,6 +752,11 @@ void get_fft_summary(double *vm, double sample_rate, double t_range[2], arg_t *f
 }
 
 
+void set_summary_rate(double fs_new){
+    fs = fs_new;
+}
+
+
 void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t *summary)
 {
     // downsampling
@@ -732,14 +768,12 @@ void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t 
 
     arg_t res_rk;
     double *rk_tmp, *psi_tmp;
-    rk_tmp = (double*) malloc(sz_d * max_step);
-    psi_tmp = (double*) malloc(sz_d * max_step);
+    rk_tmp = (double*) calloc(max_step, sz_d);
+    psi_tmp = (double*) calloc(max_step, sz_d);
     int flag=0;
     if (targets == NULL){
         targets = (int*) calloc(cells->num_cells, sizeof(int));
-        for (int n=0; n<cells->num_cells; n++){
-            if (cells->types[n] == 0) targets[n] = 1;
-        }
+        for (int n=0; n<cells->num_cells; n++){ targets[n] = 1; }
         flag = 1;
     }
     get_Kuramoto_order_params(max_step, cells, targets, rk_tmp, psi_tmp);
@@ -758,6 +792,7 @@ void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t 
     summary->freq = res_fft.x;
     summary->yf = res_fft.y;
 }
+
 
 
 void free_summary(res_t *summary)
@@ -844,7 +879,7 @@ void init_network(network_info_t *info, neuron_t *cells, syn_t *syns, syn_t *bck
 
     init_syn_vars(syns, info->num_cells, info->type, &ntk_syn,
                         info->syn_veq, info->syn_tau, cells->v, cells->ic);
-    if (info->type == DELAY){
+    if (info->type & DELAY){
         for (int n=0; n<syns->num_syns; n++){
             syns->delay[n] = genrand64_normal(info->t_delay_m, info->t_delay_std)/_dt;
         }
