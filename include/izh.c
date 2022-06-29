@@ -517,11 +517,19 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
         if ((is_target != NULL) && (is_target[n] == 0)){
             continue;
         }
-        N++;
+        // N++;
+        
         
         // 이것만 해도 돌아감 왜? (condition: seed n*10 + 5000, n=[10, 100))
         // cells->t_fired[n][cells->num_spk[n]] = -1;
-        double *phase = get_spike_phase(cells->num_spk[n], len, cells->t_fired[n]);
+        int status_no_spike;
+        double *phase = get_spike_phase(cells->num_spk[n], len, cells->t_fired[n], &status_no_spike);
+        if (status_no_spike == 1){
+            free(phase);
+            continue;
+        }
+
+        N++;
         double *tmp_real = (double*) calloc(len, sz_d);
         double *tmp_imag = (double*) calloc(len, sz_d);
         // 왜 vdCos에 calloc이 필요한가? (malloc 에러남)
@@ -535,6 +543,16 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
         free(phase);
         free(tmp_real);
         free(tmp_imag);
+    }
+
+    if (N < 2){
+        for (int i=0; i<len; i++){
+            psiK[i] = -1;
+            rK[i] = -1;
+        }
+        free(sum_real);
+        free(sum_imag);
+        return;
     }
 
     cblas_dscal(len, 1./N, sum_real, 1);
@@ -596,12 +614,13 @@ double *get_fft_freq(int len, double sampling_rate)
 }
 
 
-double *get_spike_phase(int n_spk, int nmax, int *nsteps)
+double *get_spike_phase(int n_spk, int nmax, int *nsteps, int *status_no_spike)
 {
-    // memset(phase, 0, sizeof(double) * nmax);
+    *status_no_spike = 0;
     double *phase = (double*) calloc(nmax, sz_d);
 
     if (n_spk < 2){
+        *status_no_spike = 1;
         return phase;
     }
 
@@ -662,8 +681,16 @@ void append_spike(int nstep, int *num_spk, int **t_spk)
 {
     (*t_spk)[*num_spk] = nstep;
     (*num_spk)++;
+
+    // printf("append spike\n");
+
     if (((*num_spk) % _block_size == 0) && (*num_spk > 0)){
+        int *tmp = *t_spk;
         *t_spk = (int*) realloc(*t_spk, (*num_spk + _block_size) * sz_d);
+        // printf("resize spike address %p -> %p\n", tmp, *t_spk);
+        if (t_spk == NULL){
+            fprintf(stderr, "There is some error in realloc while sizing %d -> %d\n", *num_spk, *num_spk+_block_size);
+        }
     }
     (*t_spk)[*num_spk] = -1;
 }
@@ -741,14 +768,12 @@ void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t 
 
     arg_t res_rk;
     double *rk_tmp, *psi_tmp;
-    rk_tmp = (double*) malloc(sz_d * max_step);
-    // rk_tmp = (double*) calloc(max_step, sz_d);
-    psi_tmp = (double*) malloc(sz_d * max_step);
+    rk_tmp = (double*) calloc(max_step, sz_d);
+    psi_tmp = (double*) calloc(max_step, sz_d);
     int flag=0;
     if (targets == NULL){
         targets = (int*) calloc(cells->num_cells, sizeof(int));
-        // if (cells->types[n] == 0) targets[n] = 1;
-        for (int n=0; n<cells->num_cells; n++){  targets[n] = 1; }
+        for (int n=0; n<cells->num_cells; n++){ targets[n] = 1; }
         flag = 1;
     }
     get_Kuramoto_order_params(max_step, cells, targets, rk_tmp, psi_tmp);

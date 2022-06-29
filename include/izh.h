@@ -146,7 +146,7 @@ void set_summary_rate(double fs_new);
 
 // mathematical functions
 void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double *rK, double *psiK);
-double *get_spike_phase(int n_spk, int nmax, int *nsteps);
+double *get_spike_phase(int n_spk, int nmax, int *nsteps, int *status_no_spike);
 double *get_fft(int len, double *x_in);
 double *get_fft_freq(int len, double fs);
 void get_fft_summary(double *vm, double sample_rate, double t_range[2], arg_t *fft_res);
