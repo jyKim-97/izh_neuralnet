@@ -4,6 +4,7 @@
 #include <math.h>
 #include <complex.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <omp.h>
 
 #include "mkl.h"
@@ -50,6 +51,7 @@ const double default_syn_tau[MAX_TYPE] = {5, 6, 5, 5};
 double t_skip_phs = 5; // Using when calculate spike phase, ms
 double fs = 2000;
 double f_cut[2] = {4, 300};
+bool pass_spk_id = true;
 
 
 void init_random_stream(long int seed)
@@ -456,7 +458,10 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
                 } else {
                     dr[n] += 1;
                 }
-                syns->id_exp[n]++;
+
+                if (pass_spk_id){
+                    syns->id_exp[n]++;
+                }
             }
         }
     }
@@ -479,29 +484,54 @@ double *solve_deq_using_euler(double* (*f) (double*, void*, void*), int N, doubl
 double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2)
 {
     // solve differential equation usign Runge-Kutta 4th order method
+    pass_spk_id = true;
+    double *xtmp = (double*) malloc_c(sz_d * N);
 
+    // calculate K1
     double *dx = f(x, arg1, arg2);
 
-    double *xtmp = (double*) malloc_c(sz_d * N);
-    vdAdd(N, x, dx, xtmp);
+    // K2
+    cblas_dscal(N, 1./2., dx, 1); // dx1' <- dx1/2
+    vdAdd(N, x, dx, xtmp); // xtmp <- x + dx1/2 = x + dx1'
+    pass_spk_id = false;
     double *dx2 = f(xtmp, arg1, arg2);
 
-    vdAdd(N, x, dx2, xtmp);
+    // K3
+    cblas_dscal(N, 1./2., dx2, 1); // dx2' <- dx2/2
+    vdAdd(N, x, dx2, xtmp); // xtmp <- x + dx2/2 = x + dx2'
     double *dx3 = f(xtmp, arg1, arg2);
 
-    vdAdd(N, x, dx3, xtmp);
+    // K4
+    vdAdd(N, x, dx3, xtmp); // xtmp <- x + dx3
     double *dx4 = f(xtmp, arg1, arg2);
     free_c(xtmp);
 
-    cblas_daxpby(N, 1./3, dx2, 1, 1./6, dx, 1);
+    // dx = (dx1 + 2dx2 + 2dx3 + dx4)/6 = (2dx1' + 4dx2' + 2dx3 + dx4)/6
+    cblas_daxpby(N, 2./3., dx2, 1, 1./3., dx, 1);
     cblas_daxpy(N,  1./3, dx3, 1, dx, 1);
-    cblas_daxpy(N,  1./3, dx4, 1, dx, 1);
+    cblas_daxpy(N,  1./6, dx4, 1, dx, 1);
 
     free_c(dx2);
     free_c(dx3);
     free_c(dx4);
+    pass_spk_id = true;
 
     return dx;
+}
+
+
+double *solve_deq_using_rk2(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2)
+{
+    double *xtmp = (double*) malloc_c(sz_d * N);
+    pass_spk_id = true;
+
+    double *dx1 = f(x, arg1, arg2);
+
+    cblas_dscal(dx1, 1./2., dx, 1); // dx1 <- dx1/2
+
+    
+
+
 }
 
 
@@ -547,8 +577,8 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
 
     if (N < 2){
         for (int i=0; i<len; i++){
-            psiK[i] = -1;
-            rK[i] = -1;
+            psiK[i] = 0;
+            rK[i] = 0;
         }
         free(sum_real);
         free(sum_imag);
@@ -685,7 +715,7 @@ void append_spike(int nstep, int *num_spk, int **t_spk)
     // printf("append spike\n");
 
     if (((*num_spk) % _block_size == 0) && (*num_spk > 0)){
-        int *tmp = *t_spk;
+        // int *tmp = *t_spk;
         *t_spk = (int*) realloc(*t_spk, (*num_spk + _block_size) * sz_d);
         // printf("resize spike address %p -> %p\n", tmp, *t_spk);
         if (t_spk == NULL){
