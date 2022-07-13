@@ -487,21 +487,21 @@ double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double 
     pass_spk_id = true;
     double *xtmp = (double*) malloc_c(sz_d * N);
 
-    // calculate K1
+    // calculate dx1
     double *dx = f(x, arg1, arg2);
 
-    // K2
+    // dx2
     cblas_dscal(N, 1./2., dx, 1); // dx1' <- dx1/2
     vdAdd(N, x, dx, xtmp); // xtmp <- x + dx1/2 = x + dx1'
     pass_spk_id = false;
     double *dx2 = f(xtmp, arg1, arg2);
 
-    // K3
+    // dx3
     cblas_dscal(N, 1./2., dx2, 1); // dx2' <- dx2/2
     vdAdd(N, x, dx2, xtmp); // xtmp <- x + dx2/2 = x + dx2'
     double *dx3 = f(xtmp, arg1, arg2);
 
-    // K4
+    // dx4
     vdAdd(N, x, dx3, xtmp); // xtmp <- x + dx3
     double *dx4 = f(xtmp, arg1, arg2);
     free_c(xtmp);
@@ -522,16 +522,17 @@ double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double 
 
 double *solve_deq_using_rk2(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2)
 {
-    double *xtmp = (double*) malloc_c(sz_d * N);
     pass_spk_id = true;
+    double *dx = f(x, arg1, arg2);
 
-    double *dx1 = f(x, arg1, arg2);
+    pass_spk_id = false;
+    double *xtmp = (double*) malloc_c(sz_d * N);
+    vdAdd(N, x, dx, xtmp);
+    double *dx2 = f(xtmp, arg1, arg2);
+    pass_spk_id = true;
+    free(xtmp);
 
-    cblas_dscal(dx1, 1./2., dx, 1); // dx1 <- dx1/2
-
-    
-
-
+    cblas_daxpby(N, 1./2., dx, 1, 1./2., dx2, 1);
 }
 
 
