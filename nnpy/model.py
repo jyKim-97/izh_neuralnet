@@ -57,6 +57,17 @@ class SingleCell:
         self.d = d
         self.dt = dt
 
+    def init_cell(self, tmax):
+        nitr = int(tmax/self.dt)+1
+
+        self.vs = np.zeros(nitr)
+        self.us = np.zeros(nitr)
+        self.ics = np.zeros(nitr-1)
+        self.nid_spk = []
+        self.ts = np.arange(nitr) * self.dt
+        self.vs[0] = self.c
+
+
     def run(self, tmax, ic_custom=None, ic_sq_t=None, ic_sq_amp=None):
         nitr = int(tmax/self.dt)+1
 
@@ -68,13 +79,7 @@ class SingleCell:
         else:
             ic_square = False
 
-        self.vs = np.zeros(nitr)
-        self.us = np.zeros(nitr)
-        self.ics = np.zeros(nitr-1)
-        self.nid_spk = []
-        self.ts = np.arange(nitr) * self.dt
-        self.vs[0] = self.c
-
+        self.init_cell(tmax)
         for n in range(nitr-1):
             ic = 0
             if ic_custom is not None:

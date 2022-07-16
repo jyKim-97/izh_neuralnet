@@ -4,6 +4,8 @@
 #define SIG_SEND 2
 const int sig_end = -1;
 
+// TODO: core 사용량 제한하는 코드 추가
+
 int world_rank, world_size;
 
 

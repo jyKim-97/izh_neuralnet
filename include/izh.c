@@ -66,7 +66,8 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE]
 
     cells->v  = (double*) malloc_c(sz_d * num_cells);
     cells->u  = (double*) malloc_c(sz_d * num_cells);
-    cells->ic = (double*) malloc_c(sz_d * num_cells);
+    // cells->ic = (double*) malloc_c(sz_d * num_cells);
+    cells->ic = (double*) calloc_c(num_cells, sz_d);
     cells->a  = (double*) malloc_c(sz_d * num_cells);
     cells->b  = (double*) malloc_c(sz_d * num_cells);
     cells->c  = (double*) malloc_c(sz_d * num_cells);
@@ -74,7 +75,7 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE]
 
     // allocate cell params
     for (int n=0; n<num_cells; n++){
-        cells->v[n] = -70;
+        cells->v[n] = genrand64_normal(-70, 5);
         cells->u[n] = 0;
         // set parameters
         int ctp = cell_types[n];
@@ -249,6 +250,10 @@ void update_neurons(neuron_t *cells, int nstep)
     
     double *dv = solve_deq_using_rk4(f_dv, N, cells->v, (void*) cells, NULL);
     double *du = solve_deq_using_rk4(f_du, N, cells->u, (void*) cells, NULL);
+    // double *dv = solve_deq_using_rk2(f_dv, N, cells->v, (void*) cells, NULL);
+    // double *du = solve_deq_using_rk2(f_du, N, cells->u, (void*) cells, NULL);
+    // double *dv = solve_deq_using_euler(f_dv, N, cells->v, (void*) cells, NULL);
+    // double *du = solve_deq_using_euler(f_du, N, cells->u, (void*) cells, NULL);
 
     cblas_daxpy(N, 1, dv, 1, cells->v, 1);
     cblas_daxpy(N, 1, du, 1, cells->u, 1);
@@ -275,8 +280,9 @@ void update_neurons(neuron_t *cells, int nstep)
 void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 {   
     int N = syns->num_pres;
-    double *dr = solve_deq_using_euler(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
-    // double *dr = solve_deq_using_rk4(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    // double *dr = solve_deq_using_euler(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    // double *dr = solve_deq_using_rk2(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    double *dr = solve_deq_using_rk4(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
 
     if (syns->type & STD){
@@ -294,8 +300,9 @@ void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 void update_syns_delay(syn_t *syns, neuron_t *cells)
 {
     int N = syns->num_syns;
-    double *dr = solve_deq_using_euler(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
-    // double *dr = solve_deq_using_rk4(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
+    // double *dr = solve_deq_using_euler(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
+    // double *dr = solve_deq_using_rk2(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
+    double *dr = solve_deq_using_rk4(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
 
     if (syns->type & STD){
@@ -466,6 +473,8 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
         }
     }
 
+    // if (pass_spk_id)
+
     double *dr_new = (double*) malloc_c(sz_d * syns->num_syns);
     vdMul(syns->num_syns, syns->inv_tau, dr, dr_new);
     free(dr);
@@ -530,9 +539,12 @@ double *solve_deq_using_rk2(double* (*f) (double*, void*, void*), int N, double 
     vdAdd(N, x, dx, xtmp);
     double *dx2 = f(xtmp, arg1, arg2);
     pass_spk_id = true;
-    free(xtmp);
+    free_c(xtmp);
 
-    cblas_daxpby(N, 1./2., dx, 1, 1./2., dx2, 1);
+    cblas_daxpby(N, 1./2., dx2, 1, 1./2., dx, 1);
+    free_c(dx2);
+
+    return dx;
 }
 
 
