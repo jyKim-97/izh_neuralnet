@@ -139,6 +139,7 @@ double *f_dz_syns_delay(double *z, void *arg_syn, void *arg_null);
 double *f_dz_syns_no_delay(double *z, void *arg_syn, void *arg_null);
 double *solve_deq_using_euler(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2);
 double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2);
+double *solve_deq_using_rk2(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2);
 void append_spike(int nstep, int *num_spk, int **t_spk);
 double get_avg(int num_x, double *x, int *is_target);
 void reset_spike(neuron_t *cells);

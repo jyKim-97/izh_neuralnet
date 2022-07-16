@@ -4,6 +4,7 @@
 #include <math.h>
 #include <complex.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <omp.h>
 
 #include "mkl.h"
@@ -50,6 +51,7 @@ const double default_syn_tau[MAX_TYPE] = {5, 6, 5, 5};
 double t_skip_phs = 5; // Using when calculate spike phase, ms
 double fs = 2000;
 double f_cut[2] = {4, 300};
+bool pass_spk_id = true;
 
 
 void init_random_stream(long int seed)
@@ -64,7 +66,8 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE]
 
     cells->v  = (double*) malloc_c(sz_d * num_cells);
     cells->u  = (double*) malloc_c(sz_d * num_cells);
-    cells->ic = (double*) malloc_c(sz_d * num_cells);
+    // cells->ic = (double*) malloc_c(sz_d * num_cells);
+    cells->ic = (double*) calloc_c(num_cells, sz_d);
     cells->a  = (double*) malloc_c(sz_d * num_cells);
     cells->b  = (double*) malloc_c(sz_d * num_cells);
     cells->c  = (double*) malloc_c(sz_d * num_cells);
@@ -72,7 +75,7 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE]
 
     // allocate cell params
     for (int n=0; n<num_cells; n++){
-        cells->v[n] = -70;
+        cells->v[n] = genrand64_normal(-70, 5);
         cells->u[n] = 0;
         // set parameters
         int ctp = cell_types[n];
@@ -247,6 +250,10 @@ void update_neurons(neuron_t *cells, int nstep)
     
     double *dv = solve_deq_using_rk4(f_dv, N, cells->v, (void*) cells, NULL);
     double *du = solve_deq_using_rk4(f_du, N, cells->u, (void*) cells, NULL);
+    // double *dv = solve_deq_using_rk2(f_dv, N, cells->v, (void*) cells, NULL);
+    // double *du = solve_deq_using_rk2(f_du, N, cells->u, (void*) cells, NULL);
+    // double *dv = solve_deq_using_euler(f_dv, N, cells->v, (void*) cells, NULL);
+    // double *du = solve_deq_using_euler(f_du, N, cells->u, (void*) cells, NULL);
 
     cblas_daxpy(N, 1, dv, 1, cells->v, 1);
     cblas_daxpy(N, 1, du, 1, cells->u, 1);
@@ -273,8 +280,9 @@ void update_neurons(neuron_t *cells, int nstep)
 void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 {   
     int N = syns->num_pres;
-    double *dr = solve_deq_using_euler(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
-    // double *dr = solve_deq_using_rk4(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    // double *dr = solve_deq_using_euler(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    // double *dr = solve_deq_using_rk2(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
+    double *dr = solve_deq_using_rk4(f_dr_syns_no_delay, N, syns->r, (void*) syns, (void*) id_fired_pre);
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
 
     if (syns->type & STD){
@@ -292,8 +300,9 @@ void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 void update_syns_delay(syn_t *syns, neuron_t *cells)
 {
     int N = syns->num_syns;
-    double *dr = solve_deq_using_euler(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
-    // double *dr = solve_deq_using_rk4(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
+    // double *dr = solve_deq_using_euler(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
+    // double *dr = solve_deq_using_rk2(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
+    double *dr = solve_deq_using_rk4(f_dr_syns_delay, N, syns->r, (void*) syns, (void*) cells);
     cblas_daxpy(N, 1, dr, 1, syns->r, 1);
 
     if (syns->type & STD){
@@ -456,10 +465,15 @@ double *f_dr_syns_delay(double *r, void *arg_syn, void *arg_cell)
                 } else {
                     dr[n] += 1;
                 }
-                syns->id_exp[n]++;
+
+                if (pass_spk_id){
+                    syns->id_exp[n]++;
+                }
             }
         }
     }
+
+    // if (pass_spk_id)
 
     double *dr_new = (double*) malloc_c(sz_d * syns->num_syns);
     vdMul(syns->num_syns, syns->inv_tau, dr, dr_new);
@@ -479,27 +493,56 @@ double *solve_deq_using_euler(double* (*f) (double*, void*, void*), int N, doubl
 double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2)
 {
     // solve differential equation usign Runge-Kutta 4th order method
+    pass_spk_id = true;
+    double *xtmp = (double*) malloc_c(sz_d * N);
 
+    // calculate dx1
     double *dx = f(x, arg1, arg2);
 
-    double *xtmp = (double*) malloc_c(sz_d * N);
-    vdAdd(N, x, dx, xtmp);
+    // dx2
+    cblas_dscal(N, 1./2., dx, 1); // dx1' <- dx1/2
+    vdAdd(N, x, dx, xtmp); // xtmp <- x + dx1/2 = x + dx1'
+    pass_spk_id = false;
     double *dx2 = f(xtmp, arg1, arg2);
 
-    vdAdd(N, x, dx2, xtmp);
+    // dx3
+    cblas_dscal(N, 1./2., dx2, 1); // dx2' <- dx2/2
+    vdAdd(N, x, dx2, xtmp); // xtmp <- x + dx2/2 = x + dx2'
     double *dx3 = f(xtmp, arg1, arg2);
 
-    vdAdd(N, x, dx3, xtmp);
+    // dx4
+    vdAdd(N, x, dx3, xtmp); // xtmp <- x + dx3
     double *dx4 = f(xtmp, arg1, arg2);
     free_c(xtmp);
 
-    cblas_daxpby(N, 1./3, dx2, 1, 1./6, dx, 1);
+    // dx = (dx1 + 2dx2 + 2dx3 + dx4)/6 = (2dx1' + 4dx2' + 2dx3 + dx4)/6
+    cblas_daxpby(N, 2./3., dx2, 1, 1./3., dx, 1);
     cblas_daxpy(N,  1./3, dx3, 1, dx, 1);
-    cblas_daxpy(N,  1./3, dx4, 1, dx, 1);
+    cblas_daxpy(N,  1./6, dx4, 1, dx, 1);
 
     free_c(dx2);
     free_c(dx3);
     free_c(dx4);
+    pass_spk_id = true;
+
+    return dx;
+}
+
+
+double *solve_deq_using_rk2(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2)
+{
+    pass_spk_id = true;
+    double *dx = f(x, arg1, arg2);
+
+    pass_spk_id = false;
+    double *xtmp = (double*) malloc_c(sz_d * N);
+    vdAdd(N, x, dx, xtmp);
+    double *dx2 = f(xtmp, arg1, arg2);
+    pass_spk_id = true;
+    free_c(xtmp);
+
+    cblas_daxpby(N, 1./2., dx2, 1, 1./2., dx, 1);
+    free_c(dx2);
 
     return dx;
 }
@@ -547,8 +590,8 @@ void get_Kuramoto_order_params(int len, neuron_t *cells, int *is_target, double 
 
     if (N < 2){
         for (int i=0; i<len; i++){
-            psiK[i] = -1;
-            rK[i] = -1;
+            psiK[i] = 0;
+            rK[i] = 0;
         }
         free(sum_real);
         free(sum_imag);
@@ -685,7 +728,7 @@ void append_spike(int nstep, int *num_spk, int **t_spk)
     // printf("append spike\n");
 
     if (((*num_spk) % _block_size == 0) && (*num_spk > 0)){
-        int *tmp = *t_spk;
+        // int *tmp = *t_spk;
         *t_spk = (int*) realloc(*t_spk, (*num_spk + _block_size) * sz_d);
         // printf("resize spike address %p -> %p\n", tmp, *t_spk);
         if (t_spk == NULL){
