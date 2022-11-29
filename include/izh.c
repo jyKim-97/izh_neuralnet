@@ -75,7 +75,7 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE]
 
     // allocate cell params
     for (int n=0; n<num_cells; n++){
-        cells->v[n] = genrand64_normal(-70, 5);
+        cells->v[n] = genrand64_normal(-65, 5);
         cells->u[n] = 0;
         // set parameters
         int ctp = cell_types[n];
@@ -277,6 +277,12 @@ void update_neurons(neuron_t *cells, int nstep)
 }
 
 
+void update_bck_noise(syn_t *bck_syns)
+{
+
+}
+
+
 void update_syns_no_delay(syn_t *syns, int *id_fired_pre)
 {   
     int N = syns->num_pres;
@@ -314,6 +320,12 @@ void update_syns_delay(syn_t *syns, neuron_t *cells)
     }
 
     free_c(dr);
+}
+
+
+void update_ou_syns(ou_syn_t *syns)
+{
+    
 }
 
 
@@ -490,9 +502,47 @@ double *solve_deq_using_euler(double* (*f) (double*, void*, void*), int N, doubl
 }
 
 
+// double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2)
+// {
+//     // solve differential equation usign Runge-Kutta 4th order method
+//     pass_spk_id = true;
+//     double *xtmp = (double*) malloc_c(sz_d * N);
+
+//     // calculate dx1
+//     double *dx = f(x, arg1, arg2);
+
+//     // dx2
+//     cblas_dscal(N, 1./2., dx, 1); // dx1' <- dx1/2
+//     vdAdd(N, x, dx, xtmp); // xtmp <- x + dx1/2 = x + dx1'
+//     pass_spk_id = false;
+//     double *dx2 = f(xtmp, arg1, arg2);
+
+//     // dx3
+//     cblas_dscal(N, 1./2., dx2, 1); // dx2' <- dx2/2
+//     vdAdd(N, x, dx2, xtmp); // xtmp <- x + dx2/2 = x + dx2'
+//     double *dx3 = f(xtmp, arg1, arg2);
+
+//     // dx4
+//     vdAdd(N, x, dx3, xtmp); // xtmp <- x + dx3
+//     double *dx4 = f(xtmp, arg1, arg2);
+//     free_c(xtmp);
+
+//     // dx = (dx1 + 2dx2 + 2dx3 + dx4)/6 = (2dx1' + 4dx2' + 2dx3 + dx4)/6
+//     cblas_daxpby(N, 2./3., dx2, 1, 1./3., dx, 1);
+//     cblas_daxpy(N,  1./3, dx3, 1, dx, 1);
+//     cblas_daxpy(N,  1./6, dx4, 1, dx, 1);
+
+//     free_c(dx2);
+//     free_c(dx3);
+//     free_c(dx4);
+//     pass_spk_id = true;
+
+//     return dx;
+// }
+
 double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double *x, void *arg1, void *arg2)
 {
-    // solve differential equation usign Runge-Kutta 4th order method
+    // solve differential equation usign Runge-Kutta 4th order method (3/8 rule)
     pass_spk_id = true;
     double *xtmp = (double*) malloc_c(sz_d * N);
 
@@ -500,7 +550,7 @@ double *solve_deq_using_rk4(double* (*f) (double*, void*, void*), int N, double 
     double *dx = f(x, arg1, arg2);
 
     // dx2
-    cblas_dscal(N, 1./2., dx, 1); // dx1' <- dx1/2
+    cblas_dscal(N, 1./3., dx, 1); // dx1' <- dx1/2
     vdAdd(N, x, dx, xtmp); // xtmp <- x + dx1/2 = x + dx1'
     pass_spk_id = false;
     double *dx2 = f(xtmp, arg1, arg2);
@@ -816,6 +866,7 @@ void get_summary(int max_step, double *vm, neuron_t *cells, int *targets, res_t 
     int flag=0;
     if (targets == NULL){
         targets = (int*) calloc(cells->num_cells, sizeof(int));
+        // for (int n=0; n<cells->num_cells; n++){ targets[n] = 1; }
         for (int n=0; n<cells->num_cells; n++){ targets[n] = 1; }
         flag = 1;
     }

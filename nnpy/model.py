@@ -28,6 +28,11 @@ def update_x_rk4(func, dt, x, *args):
     k3 = func(x+k2/2, *args) * dt
     k4 = func(x+k3, *args) * dt
     return x + (k1+2*k2+2*k3+k4)/6 # return x_{n+1}
+    # k1 = func(x, *args) * dt
+    # k2 = func(x+k1/3, *args) * dt
+    # k3 = func(x-k1/3+k2, *args) * dt
+    # k4 = func(x+k1-k2+k3, *args) * dt
+    # return x + (k1+3*k2+3*k3+k4)/8 # return x_{n+1}
 
 
 # test current
