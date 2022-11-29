@@ -70,6 +70,16 @@ typedef struct _syn_t {
 } syn_t;
 
 
+typedef struct _ou_syn_t {
+    // Ornstein-Uhlenbeck process
+    int nums; //same with Num of the cells
+
+    // double *mu = 
+    
+
+} ou_syn_t;
+
+
 typedef struct _network_info_t {
     int num_cells;
     double cell_type_ratio[MAX_TYPE];
