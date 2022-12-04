@@ -111,6 +111,7 @@ class SingleCell:
         is_spk = self.vs[n] >= 30
         if is_spk:
             self.vs[n] = self.c
+            self.us[n] += self.d
             self.nid_spk.append(n)
 
 
