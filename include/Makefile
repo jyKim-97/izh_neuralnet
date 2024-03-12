@@ -18,6 +18,7 @@ main: $(OBJS)
 
 
 $(OBJS): $(SRCS)
+	echo ${MKLROOT}
 	$(CC) $(CFLAGS) -o $@ -c $*$..c $(INC) $(LIB) $(LDFLAGS)
 
 mpifor.o: mpifor.c

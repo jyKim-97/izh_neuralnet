@@ -166,7 +166,7 @@ def get_spike_hist(obj, tbin=5):
     return t_spks_vec/num_exc, t_hist
 
 
-def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s=1):
+def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s=1, **marker_opt):
     if colors is None:
         colors = np.array([[203, 67, 53], [36, 113, 163]])/255
     
@@ -192,7 +192,7 @@ def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s
     else:
         idx = np.ones(len(x), dtype=bool)
         
-    plt.scatter(x[idx], y[idx], s=s, c=c[idx])
+    plt.scatter(x[idx], y[idx], s=s, c=c[idx], **marker_opt)
     if xlim is not None:
         plt.xlim(xlim)
     if ylim is None:
@@ -418,7 +418,9 @@ def imshow_xy(im, x=None, y=None, cmap="jet", **kwargs):
         x = np.arange(im.shape[1])
     if y is None:
         y = np.arange(im.shape[0])
-    xy = (x[0], x[-1], y[0], y[-1])
+    dx = x[1] - x[0]
+    dy = y[1] - y[0]
+    xy = (x[0]-dx/2, x[-1]+dx/2, y[0]-dy/2, y[-1]+dy/2)
     return plt.imshow(im, extent=xy, origin="lower", aspect="auto", cmap=cmap, **kwargs)
 
 

@@ -190,7 +190,7 @@ class NeuralNet(metaclass=ABCMeta):
     def _check_current_type(self, Is):
         # Is (1, nt) or (self.N, nt)
         self.is_gen = False
-        if Is == 0:
+        if isinstance(Is, int) and Is == 0:
             return
         elif Is.__class__.__name__ == 'generator':
             self.is_gen = True
@@ -295,9 +295,9 @@ class IzhExpNet(IzhSimpleNet):
         # set params - a, b, c, d
         self._alloc_cell_params(cell_params, cell_types)
         # set synaptic parameters - tau, ev (equilibrium potential)
-        self._alloc_syn_params(cell_params, cell_types)
+        self._alloc_syn_params(cell_params, cell_types, weight_mat)
     
-    def _alloc_syn_params(self, cell_params, cell_types):
+    def _alloc_syn_params(self, cell_params, cell_types, weight_mat):
         # allocate synaptir parameters
         for str_var in ['tau', 'ev']:
             self.__dict__[str_var] = np.array(
@@ -305,6 +305,7 @@ class IzhExpNet(IzhSimpleNet):
                 )
         self.ev = np.tile(self.ev, [self.N, 1])
         self.D = 0.05
+        self.weight_mat = np.array(weight_mat)
 
     def _fsyn(self, r, tau, is_fired, D):
         return (-r + D * is_fired)/tau

@@ -42,6 +42,7 @@ double _dt = 0.005; // simulation time step
 const double default_cell_params[MAX_TYPE][4]= {
         {0.02, 0.2, -65, 8},    // RS
             {0.1, 0.2, -65, 2},   // FS
+            // {0.02, 0.2, -65, 8},
             {0.02, 0.2, -55, 4},    // IB
             {0.02, 0.2, -50, 2},
             {0, 0, 0, 0},
@@ -76,7 +77,7 @@ void init_cell_vars(neuron_t *cells, int num_cells, double cell_params[MAX_TYPE]
     // allocate cell params
     for (int n=0; n<num_cells; n++){
         cells->v[n] = genrand64_normal(-65, 5);
-        cells->u[n] = 0;
+        cells->u[n] = genrand64_normal(0, 5);
         // set parameters
         int ctp = cell_types[n];
         cells->a[n] = cell_params[ctp][0];
