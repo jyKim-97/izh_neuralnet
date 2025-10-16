@@ -5,8 +5,7 @@
 #define MAX_TYPE 6
 
 extern double _dt;
-
-
+extern double ipost_syn_track;
 
 
 typedef enum _SYN_TYPE {

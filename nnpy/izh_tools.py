@@ -166,13 +166,30 @@ def get_spike_hist(obj, tbin=5):
     return t_spks_vec/num_exc, t_hist
 
 
+def get_spike_hist_ei(obj, tbin=5):
+    num_exc = int(obj.num_cells * 0.8)
+    num_inh = int(obj.num_cells * 0.2)
+    
+    edges = np.arange(0, obj.tmax, tbin)
+    t_spks_vec = np.zeros((2, len(edges)-1))
+    for n in range(obj.num_cells):
+        nid = n//num_exc
+        bins, _ = np.histogram(obj.t_spks[n], edges)
+        bins[bins > 0] = 1
+        t_spks_vec[nid] += bins
+    t_hist = (edges[1:] + edges[:-1])/2
+    t_spks_vec[0] = t_spks_vec[0] / num_exc
+    t_spks_vec[1] = t_spks_vec[1] / num_inh    
+    return t_spks_vec, t_hist
+
+
 def draw_raster_plot(tspk, xlim=None, ylim=None, colors=None, cell_types=None, s=1, **marker_opt):
     if colors is None:
         colors = np.array([[203, 67, 53], [36, 113, 163]])/255
     
     num_cells = len(tspk)
     if cell_types is None:
-        cell_types = np.ones(num_cells, dtype=np.int)
+        cell_types = np.ones(num_cells, dtype=int)
     
     # get scatter array
     x, y, c = [], [], []    
@@ -300,6 +317,16 @@ def draw_single_summary(obj, xlim=None, flim=(5,105), clim=None, vlim=None, titl
 
 ### Network tools ###
 def read_graph(graph_name):
+    """
+    
+    outputs
+    --------
+    graph["adj_list"]: (i, j) 
+        adjacency list where i is the pre-node and j is the post-node
+    graph["weight"]
+    
+    """
+    
     graph = dict()
     graph["weight"] = []
     graph["adj_list"] = []

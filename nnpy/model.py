@@ -3,6 +3,7 @@ import numpy as np
 from abc import *
 from time import time
 from functools import wraps
+from tqdm import tqdm
 
 def wrap_init_net(func):
     @wraps(func)
@@ -72,8 +73,7 @@ class SingleCell:
         self.ts = np.arange(nitr) * self.dt
         self.vs[0] = self.c
 
-
-    def run(self, tmax, ic_custom=None, ic_sq_t=None, ic_sq_amp=None):
+    def run(self, tmax, ic_custom=None, ic_sq_t=None, ic_sq_amp=None, v0=None, u0=None, show_progress=True):
         nitr = int(tmax/self.dt)+1
 
         ic_sq_n = ic_sq_t
@@ -85,7 +85,17 @@ class SingleCell:
             ic_square = False
 
         self.init_cell(tmax)
-        for n in range(nitr-1):
+        if v0 is not None:
+            self.vs[0] = v0
+        if u0 is not None:
+            self.us[0] = u0
+        
+        if show_progress:
+            nitr = tqdm(range(nitr-1))
+        else:
+            nitr = range(nitr-1)
+        
+        for n in nitr:
             ic = 0
             if ic_custom is not None:
                 ic += ic_custom[n]

@@ -36,19 +36,21 @@
 #define PI 3.14159265359
 #define _block_size 2000
 VSLStreamStatePtr rand_stream;
+double ipost_syn_track = 0;
 
 
 double _dt = 0.005; // simulation time step
 const double default_cell_params[MAX_TYPE][4]= {
         {0.02, 0.2, -65, 8},    // RS
             {0.1, 0.2, -65, 2},   // FS
-            // {0.02, 0.2, -65, 8},
+            // {0.02, 0.2, -65, 8}, // Change dynamics
             {0.02, 0.2, -55, 4},    // IB
             {0.02, 0.2, -50, 2},
             {0, 0, 0, 0},
             {0, 0, 0, 0}};   // CH
 const double default_syn_veq[MAX_TYPE] = {0, -80, 0, 0};
 const double default_syn_tau[MAX_TYPE] = {5, 6, 5, 5};
+// const double default_syn_tau[MAX_TYPE] = {5, 5, 5, 5};
 double t_skip_phs = 5; // Using when calculate spike phase, ms
 double fs = 2000;
 double f_cut[2] = {4, 300};
@@ -197,6 +199,7 @@ void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns
     } else {
         memcpy(cells->ic, ic, sz_d*cells->num_cells);
     }
+    ipost_syn_track = 0;
 
     int *id_fired_bck = (int*) malloc(sizeof(int) * (bck_syns->num_pres+1));
     gen_bck_spike(bck_syns, id_fired_bck);
@@ -209,10 +212,12 @@ void update(int nstep, double *ic, neuron_t *cells, syn_t *syns, syn_t *bck_syns
     } else {
         update_syns_no_delay(syns, cells->id_fired);
     }
+
     add_isyn(syns);
 
     update_neurons(cells, nstep);
 }
+
 
 
 void add_isyn_bck(syn_t *syns)
@@ -225,6 +230,9 @@ void add_isyn_bck(syn_t *syns)
 }
 
 
+
+
+
 void add_isyn(syn_t *syns)
 {
     if (syns->type & NO_DELAY){
@@ -232,6 +240,7 @@ void add_isyn(syn_t *syns)
             int id = syns->id_pre_neuron[n];
             double rdv = syns->r[id] * (*(syns->ptr_vpost[n]) - syns->veq[id]);
             *(syns->ptr_ipost[n]) -= syns->weight[n]*rdv;
+            ipost_syn_track -= syns->weight[n]*rdv;
         }
 
     } else if (syns->type & DELAY){
@@ -239,6 +248,7 @@ void add_isyn(syn_t *syns)
             int id = syns->id_pre_neuron[n];
             double dv = *(syns->ptr_vpost[n]) - syns->veq[id];
             *(syns->ptr_ipost[n]) -= syns->weight[n]*syns->r[n]*dv;
+            ipost_syn_track -= syns->weight[n]*syns->r[n]*dv;
         }
     }
 }
@@ -275,6 +285,7 @@ void update_neurons(neuron_t *cells, int nstep)
 
     free_c(dv);
     free_c(du);
+    ipost_syn_track = 0;
 }
 
 
